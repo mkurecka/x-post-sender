@@ -9,6 +9,7 @@ import processRoutes from './routes/process';
 import postsRoutes from './routes/posts';
 import memoryRoutes from './routes/memory';
 import settingsRoutes from './routes/settings';
+import visualContentRoutes from './routes/visual-content';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -53,6 +54,7 @@ app.route('/api/process', processRoutes);
 app.route('/api/posts', postsRoutes);
 app.route('/api/memory', memoryRoutes);
 app.route('/api/settings', settingsRoutes);
+app.route('/api/visual-content', visualContentRoutes);
 
 // 404 handler
 app.notFound((c) => {

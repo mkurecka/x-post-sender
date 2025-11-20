@@ -41,6 +41,14 @@ function createFloatingButton() {
         </svg>
         <span>Process</span>
       </button>
+      <button class="utp-fab-action" data-action="create-image" title="Create Visual Content">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+          <circle cx="8.5" cy="8.5" r="1.5"></circle>
+          <polyline points="21 15 16 10 5 21"></polyline>
+        </svg>
+        <span>Create Image</span>
+      </button>
       <button class="utp-fab-action" data-action="memory" title="Save to Memory">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
@@ -108,6 +116,14 @@ function createFloatingButton() {
         case 'process':
           if (selectedText && selectedText.length > 0) {
             openProcessModal(selectedText, selectionContext);
+          } else {
+            showFloatingNotification('Please select some text first', 'warning');
+          }
+          break;
+
+        case 'create-image':
+          if (selectedText && selectedText.length > 0) {
+            openVisualContentModal(selectedText, selectionContext);
           } else {
             showFloatingNotification('Please select some text first', 'warning');
           }
@@ -970,6 +986,161 @@ function setupApproveRejectButtons(savedPost, statusDiv) {
       rejectBtn.disabled = true;
     });
   }
+}
+
+// Visual Content Modal
+async function openVisualContentModal(text, context) {
+  console.log('[Visual Content] Opening modal with text:', text?.substring(0, 50));
+
+  if (!text || text.length === 0) {
+    showFloatingNotification('No text selected', 'warning');
+    return;
+  }
+
+  const visualSettings = appSettings?.visualContent || {};
+  const imageTypes = visualSettings.imageTypes || {};
+
+  const modalHtml = `
+    <div class="my-plugin-overlay" id="visual-content-overlay">
+      <div class="my-plugin-modal" style="max-height: 85vh; overflow-y: auto;">
+        <h3>🎨 Create Visual Content</h3>
+
+        <div style="background: #f5f5f5; padding: 10px; border-radius: 5px; margin-bottom: 15px; max-height: 120px; overflow-y: auto;">
+          <div style="font-size: 11px; color: #666; margin-bottom: 5px;">
+            <strong>From:</strong> ${context.pageTitle || context.url}
+          </div>
+          <div style="font-size: 12px; color: #333;">
+            ${text.substring(0, 200)}${text.length > 200 ? '...' : ''}
+          </div>
+        </div>
+
+        <label><strong>Image Types:</strong></label>
+        <div id="image-types-selector" style="margin-bottom: 15px;">
+          ${Object.entries(imageTypes).map(([key, spec]) => `
+            <label style="display: block; padding: 8px; margin: 5px 0; background: #fafafa; border-radius: 5px; cursor: pointer; border: 2px solid transparent;">
+              <input type="checkbox" class="image-type-checkbox" value="${key}" style="margin-right: 8px;">
+              <span>${spec.icon} ${spec.name}</span>
+              <span style="font-size: 11px; color: #666; display: block; margin-left: 24px;">
+                ${spec.description}
+              </span>
+            </label>
+          `).join('')}
+        </div>
+
+        <label style="cursor: pointer; margin-bottom: 15px; display: block;">
+          <input type="checkbox" id="carousel-mode" ${visualSettings.carousel?.enabled ? 'checked' : ''}>
+          <strong>Carousel Mode</strong>
+          <span style="font-size: 11px; color: #666;">(Generate multiple images)</span>
+        </label>
+
+        <label style="cursor: pointer; margin-bottom: 15px; display: block;">
+          <input type="checkbox" id="generate-caption" ${visualSettings.captionGeneration?.enabled ? 'checked' : ''}>
+          <strong>Generate Caption</strong>
+        </label>
+
+        <div id="visual-status" style="margin-top:10px; font-size:12px;"></div>
+
+        <div id="visual-preview" style="margin-top:15px; display:none;">
+          <strong>Generated Images:</strong>
+          <div id="visual-images" style="margin-top:10px; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px;"></div>
+          <div id="visual-caption" style="margin-top: 10px; padding: 10px; background: #f5f5f5; border-radius: 5px; display: none;"></div>
+        </div>
+
+        <div class="modal-actions">
+          <button id="visual-generate" class="btn-primary" style="flex: 1; padding: 10px; background: #1da1f2; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600;">
+            🎨 Generate Images
+          </button>
+          <button id="visual-close" class="btn-secondary" style="padding: 10px 20px; background: #ccc; color: #333; border: none; border-radius: 4px; cursor: pointer;">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+  const overlay = document.getElementById('visual-content-overlay');
+
+  // Generate button handler
+  document.getElementById('visual-generate').addEventListener('click', async () => {
+    const selectedTypes = Array.from(document.querySelectorAll('.image-type-checkbox:checked'))
+      .map(cb => cb.value);
+
+    if (selectedTypes.length === 0) {
+      showFloatingNotification('Please select at least one image type', 'warning');
+      return;
+    }
+
+    const carouselMode = document.getElementById('carousel-mode').checked;
+    const generateCaption = document.getElementById('generate-caption').checked;
+
+    const statusDiv = document.getElementById('visual-status');
+    statusDiv.innerHTML = '⏳ Generating images...';
+    statusDiv.style.color = '#1da1f2';
+
+    try {
+      // Wake up service worker
+      await wakeUpServiceWorker();
+
+      // Send to background script
+      const response = await chrome.runtime.sendMessage({
+        action: 'createVisualContent',
+        text,
+        imageTypes: selectedTypes,
+        carouselMode,
+        generateCaption,
+        context
+      });
+
+      if (response.success) {
+        statusDiv.innerHTML = '✅ Images generated successfully!';
+        statusDiv.style.color = 'green';
+
+        // Show preview
+        const previewDiv = document.getElementById('visual-preview');
+        const imagesDiv = document.getElementById('visual-images');
+        previewDiv.style.display = 'block';
+
+        imagesDiv.innerHTML = response.images.map(img => `
+          <div style="border: 1px solid #ddd; border-radius: 5px; overflow: hidden;">
+            <img src="${img.url}" style="width: 100%; height: auto;" alt="${img.type}">
+            <div style="padding: 5px; font-size: 11px; background: #f5f5f5;">
+              ${img.type} (${img.width}×${img.height})
+            </div>
+          </div>
+        `).join('');
+
+        if (response.caption) {
+          const captionDiv = document.getElementById('visual-caption');
+          captionDiv.innerHTML = `<strong>Caption:</strong><br>${response.caption}`;
+          captionDiv.style.display = 'block';
+        }
+
+        showFloatingNotification('Visual content created successfully!', 'success');
+      } else {
+        statusDiv.innerHTML = `❌ Error: ${response.error}`;
+        statusDiv.style.color = 'red';
+        showFloatingNotification(response.error || 'Failed to generate images', 'error');
+      }
+    } catch (error) {
+      console.error('Visual content error:', error);
+      statusDiv.innerHTML = `❌ Error: ${error.message}`;
+      statusDiv.style.color = 'red';
+      showFloatingNotification('Failed to generate images', 'error');
+    }
+  });
+
+  // Close button
+  document.getElementById('visual-close').addEventListener('click', () => {
+    overlay.remove();
+  });
+
+  // Close on overlay click
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) {
+      overlay.remove();
+    }
+  });
 }
 
 // Settings Modal

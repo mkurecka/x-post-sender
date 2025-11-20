@@ -189,11 +189,95 @@
       "onProcessText": true,
       "onSaveToMemory": true,
       "onApprove": false,
-      "onReject": false
+      "onReject": false,
+      "onVisualContentCreated": true
     }
   },
   "backend": {
     "baseUrl": "https://text-processor-api.kureckamichal.workers.dev",
     "apiVersion": "v1"
+  },
+  "visualContent": {
+    "enabled": true,
+    "htmlToImageWorker": {
+      "endpoint": "https://html-to-image.workers.dev/convert",
+      "apiKey": ""
+    },
+    "imageTypes": {
+      "quote_card": {
+        "name": "Quote Card",
+        "description": "Social media quote card (1200x630)",
+        "width": 1200,
+        "height": 630,
+        "icon": "💬",
+        "defaultOptions": {
+          "showAuthor": false
+        }
+      },
+      "screenshot_card": {
+        "name": "Screenshot Card",
+        "description": "Vertical story card (1080x1920)",
+        "width": 1080,
+        "height": 1920,
+        "icon": "📱",
+        "defaultOptions": {
+          "title": "Post",
+          "subtitle": ""
+        }
+      },
+      "infographic": {
+        "name": "Infographic",
+        "description": "Vertical infographic (800x2000)",
+        "width": 800,
+        "height": 2000,
+        "icon": "📊",
+        "defaultOptions": {
+          "title": "Key Points"
+        }
+      },
+      "story_card": {
+        "name": "Story Card",
+        "description": "Instagram/Facebook story (1080x1920)",
+        "width": 1080,
+        "height": 1920,
+        "icon": "✨",
+        "defaultOptions": {
+          "logo": true
+        }
+      },
+      "thumbnail": {
+        "name": "Thumbnail",
+        "description": "YouTube/blog thumbnail (1280x720)",
+        "width": 1280,
+        "height": 720,
+        "icon": "🖼️",
+        "defaultOptions": {
+          "badge": "NEW"
+        }
+      }
+    },
+    "branding": {
+      "colors": {
+        "primary": "#2563eb",
+        "secondary": "#8b5cf6",
+        "background": "#ffffff",
+        "text": "#1f2937"
+      },
+      "fonts": {
+        "heading": "Inter, system-ui, sans-serif",
+        "body": "Inter, system-ui, sans-serif"
+      },
+      "logo": ""
+    },
+    "carousel": {
+      "enabled": true,
+      "defaultTypes": ["quote_card", "screenshot_card", "story_card"],
+      "maxImages": 5
+    },
+    "captionGeneration": {
+      "enabled": true,
+      "model": "openai/gpt-4o-mini",
+      "promptTemplate": "Generate a compelling social media caption for this visual content:\n\nText: {text}\n\nImage types: {imageTypes}\n\nCreate a short, engaging caption (1-2 sentences) with relevant emojis."
+    }
   }
 }

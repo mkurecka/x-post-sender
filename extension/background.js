@@ -1,5 +1,5 @@
-// Import settings manager, database, and API client
-importScripts('settings-manager.js', 'database.js', 'api-client.js');
+// Import settings manager, database, API client, and template generators
+importScripts('settings-manager.js', 'database.js', 'api-client.js', 'template-generators.js');
 
 // Initialize settings and database on extension load
 let settingsLoaded = false;
@@ -628,6 +628,168 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       });
 
       sendResponse(savedTweet);
+    })();
+    return true;
+  }
+
+  // Create visual content
+  if (request.action === "createVisualContent") {
+    (async () => {
+      try {
+        const { text, imageTypes, carouselMode, generateCaption, context } = request;
+
+        console.log('[Visual Content] Creating visual content:', {
+          imageTypes,
+          carouselMode,
+          generateCaption
+        });
+
+        // Get visual content settings
+        const visualSettings = settingsManager.settings?.visualContent || {};
+        const branding = visualSettings.branding || {};
+
+        const images = [];
+
+        // Generate each image type
+        for (const imageType of imageTypes) {
+          try {
+            // Generate HTML template
+            const html = generateTemplate(imageType, text, {
+              branding,
+              ...visualSettings.imageTypes?.[imageType]?.defaultOptions
+            });
+
+            // Get image specifications
+            const spec = getImageSpec(imageType);
+
+            // Call html-to-image-worker
+            const htmlToImageEndpoint = visualSettings.htmlToImageWorker?.endpoint ||
+              'https://html-to-image.workers.dev/convert';
+
+            const imageResponse = await fetch(htmlToImageEndpoint, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                html,
+                width: spec.width,
+                height: spec.height,
+                format: 'png'
+              })
+            });
+
+            if (!imageResponse.ok) {
+              console.error(`Failed to generate ${imageType}:`, imageResponse.statusText);
+              continue;
+            }
+
+            const imageBlob = await imageResponse.blob();
+            const imageUrl = URL.createObjectURL(imageBlob);
+
+            images.push({
+              type: imageType,
+              url: imageUrl,
+              width: spec.width,
+              height: spec.height,
+              filename: `${imageType}.png`
+            });
+
+          } catch (error) {
+            console.error(`Error generating ${imageType}:`, error);
+          }
+        }
+
+        if (images.length === 0) {
+          sendResponse({
+            success: false,
+            error: 'Failed to generate any images'
+          });
+          return;
+        }
+
+        // Generate caption if requested
+        let caption = null;
+        if (generateCaption && visualSettings.captionGeneration?.enabled) {
+          try {
+            const apiKey = await getApiKey();
+            if (apiKey) {
+              const captionModel = visualSettings.captionGeneration?.model || 'openai/gpt-4o-mini';
+              const captionPrompt = `Generate a compelling social media caption for this visual content:
+
+Text: "${text}"
+
+Image types: ${imageTypes.join(', ')}
+
+Create a short, engaging caption (1-2 sentences) with relevant emojis.
+
+Return ONLY the caption text, nothing else.`;
+
+              const captionResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${apiKey}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  model: captionModel,
+                  messages: [{
+                    role: 'user',
+                    content: captionPrompt
+                  }]
+                })
+              });
+
+              if (captionResponse.ok) {
+                const captionData = await captionResponse.json();
+                caption = captionData.choices?.[0]?.message?.content?.trim();
+              }
+            }
+          } catch (error) {
+            console.error('Caption generation error:', error);
+          }
+        }
+
+        // Save to database
+        const visualContentData = {
+          type: 'visual_content',
+          originalText: text,
+          generatedOutput: JSON.stringify(images),
+          mode: carouselMode ? 'carousel' : 'single',
+          comment: caption,
+          context,
+          timestamp: Date.now(),
+          synced: false
+        };
+
+        await postDatabase.savePost(visualContentData);
+
+        // Send webhook notification if enabled
+        await sendWebhookNotification('onVisualContentCreated', {
+          event: 'visual_content_created',
+          data: {
+            text,
+            imageTypes,
+            images,
+            caption,
+            carouselMode
+          }
+        });
+
+        sendResponse({
+          success: true,
+          images,
+          caption,
+          message: 'Visual content created successfully'
+        });
+
+      } catch (error) {
+        console.error('Visual content creation error:', error);
+        sendResponse({
+          success: false,
+          error: error.message || 'Failed to create visual content'
+        });
+      }
     })();
     return true;
   }

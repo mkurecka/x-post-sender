@@ -169,6 +169,68 @@ export interface JWTPayload {
   exp: number;
 }
 
+// Visual content types
+export type ImageType = 'quote_card' | 'screenshot_card' | 'infographic' | 'story_card' | 'thumbnail';
+
+export interface VisualContentImage {
+  type: ImageType;
+  url: string;
+  width: number;
+  height: number;
+  filename?: string;
+  filesize?: number;
+}
+
+export interface VisualContent {
+  id: string;
+  user_id: string;
+  content_text: string;
+  content_type: string;
+  images_json: string;
+  carousel_mode: number;
+  caption?: string;
+  metadata_json?: string;
+  status: 'pending' | 'generated' | 'published' | 'failed';
+  created_at: number;
+  updated_at?: number;
+}
+
+export interface VisualContentMetadata {
+  branding?: {
+    logo?: string;
+    colors?: {
+      primary?: string;
+      secondary?: string;
+      background?: string;
+      text?: string;
+    };
+    fonts?: {
+      heading?: string;
+      body?: string;
+    };
+  };
+  customization?: Record<string, any>;
+  sourceUrl?: string;
+  account?: string;
+}
+
+export interface CreateVisualContentRequest {
+  text: string;
+  imageTypes: ImageType[];
+  carouselMode?: boolean;
+  branding?: VisualContentMetadata['branding'];
+  customization?: Record<string, any>;
+  generateCaption?: boolean;
+  context?: PostContext;
+}
+
+export interface CreateVisualContentResponse {
+  success: boolean;
+  visualContentId: string;
+  images: VisualContentImage[];
+  caption?: string;
+}
+
 // OpenRouter types
 export interface OpenRouterRequest {
   model: string;
