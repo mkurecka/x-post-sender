@@ -29,6 +29,10 @@ JWT_SECRET = "change-this-in-production"
 API_VERSION = "v1"
 APP_URL = "https://text-processor.app"
 OPENROUTER_API_KEY = "" # Add your OpenRouter API key here
+AIRTABLE_API_KEY = "" # Add your Airtable API key here
+AIRTABLE_BASE_ID = "" # Add your Airtable base ID here
+AIRTABLE_PROFILES_TABLE = "User Profiles" # Table name for user profiles
+AIRTABLE_WEBSITES_TABLE = "Websites" # Table name for websites
 
 # Observability
 [observability]

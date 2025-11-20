@@ -7,6 +7,10 @@ export interface Env {
   JWT_SECRET: string;
   ENVIRONMENT: string;
   API_VERSION: string;
+  AIRTABLE_API_KEY?: string;
+  AIRTABLE_BASE_ID?: string;
+  AIRTABLE_PROFILES_TABLE?: string;
+  AIRTABLE_WEBSITES_TABLE?: string;
 }
 
 // User types
@@ -263,4 +267,80 @@ export interface OpenRouterResponse {
     message: string;
     code: string;
   };
+}
+
+// Airtable types
+export interface AirtableWritingProfile {
+  language?: string;
+  tone?: string;
+  style?: string;
+  personality?: string;
+  guidelines?: string[];
+  avoid?: string[];
+  targetAudience?: string;
+  contentFocus?: string[];
+  voiceCharacteristics?: Record<string, any>;
+}
+
+export interface AirtableBrandingColors {
+  primary?: string;
+  secondary?: string;
+  background?: string;
+  text?: string;
+  accent?: string;
+}
+
+export interface AirtableUserProfile {
+  id: string;
+  userId: string;
+  name: string;
+  displayName?: string;
+  email?: string;
+  accounts?: string[];
+  writingProfile?: AirtableWritingProfile;
+  brandingColors?: AirtableBrandingColors;
+  logoUrl?: string;
+  defaultLanguage?: string;
+  enabled: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface AirtableSocialProfile {
+  platform: string;
+  username?: string;
+  url?: string;
+  enabled: boolean;
+}
+
+export interface AirtableWebsite {
+  id: string;
+  websiteId: string;
+  name: string;
+  domain: string;
+  userId: string;
+  userProfileId?: string;
+  socialProfiles?: AirtableSocialProfile[];
+  schedulingWebhook?: string;
+  enabled: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface AirtableSyncStatus {
+  lastSyncAt: number;
+  profilesCount: number;
+  websitesCount: number;
+  success: boolean;
+  errors?: string[];
+}
+
+export interface AirtableConfig {
+  baseId: string;
+  tables: {
+    profiles: string;
+    websites: string;
+  };
+  cacheTtl: number;
+  syncInterval: number;
 }

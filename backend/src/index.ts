@@ -10,6 +10,8 @@ import postsRoutes from './routes/posts';
 import memoryRoutes from './routes/memory';
 import settingsRoutes from './routes/settings';
 import visualContentRoutes from './routes/visual-content';
+import airtableRoutes from './routes/airtable';
+import webhookRoutes from './routes/webhook';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -55,6 +57,11 @@ app.route('/api/posts', postsRoutes);
 app.route('/api/memory', memoryRoutes);
 app.route('/api/settings', settingsRoutes);
 app.route('/api/visual-content', visualContentRoutes);
+app.route('/api/airtable', airtableRoutes);
+
+// Webhook routes (v1 for backward compatibility)
+app.route('/api/v1/webhook', webhookRoutes);
+app.route('/api/webhook', webhookRoutes);
 
 // 404 handler
 app.notFound((c) => {
