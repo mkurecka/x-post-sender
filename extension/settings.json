@@ -197,10 +197,29 @@
     "baseUrl": "https://text-processor-api.kureckamichal.workers.dev",
     "apiVersion": "v1"
   },
+  "airtable": {
+    "enabled": false,
+    "baseId": "",
+    "tables": {
+      "profiles": "User Profiles",
+      "websites": "Websites"
+    },
+    "sync": {
+      "enabled": false,
+      "intervalMinutes": 60,
+      "syncOnStartup": false,
+      "lastSyncAt": null
+    },
+    "cache": {
+      "enabled": true,
+      "ttlMinutes": 15
+    },
+    "fallbackToLocal": true
+  },
   "visualContent": {
     "enabled": true,
     "htmlToImageWorker": {
-      "endpoint": "https://html-to-image.workers.dev/convert",
+      "endpoint": "https://html-to-image-worker.kureckamichal.workers.dev",
       "apiKey": ""
     },
     "imageTypes": {
