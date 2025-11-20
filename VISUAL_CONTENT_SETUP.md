@@ -208,11 +208,11 @@ Make sure `template-generators.js` is there.
 
 ## Expected Worker API
 
-Your html-to-image-worker should accept:
+Your html-to-image-worker accepts:
 
 **Request:**
 ```json
-POST /convert
+POST /render
 {
   "html": "<html>...</html>",
   "width": 1200,
@@ -222,8 +222,23 @@ POST /convert
 ```
 
 **Response:**
-- Content-Type: `image/png`
-- Body: Binary PNG data
+- Content-Type: `application/json`
+- Body:
+```json
+{
+  "success": true,
+  "data": {
+    "url": "https://pub-xxx.r2.dev/render-xxx.png",
+    "filename": "render-xxx.png",
+    "size": 2418,
+    "format": "png",
+    "dimensions": {"width": 1200, "height": 630}
+  },
+  "timestamp": "2025-11-20T23:38:28.349Z"
+}
+```
+
+The worker uploads images to R2 and returns URLs instead of binary data.
 
 **CORS Headers Required:**
 ```

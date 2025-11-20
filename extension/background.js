@@ -684,17 +684,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
               continue;
             }
 
-            const imageBlob = await imageResponse.blob();
+            // Worker returns JSON with R2 URL, not binary image
+            const responseData = await imageResponse.json();
 
-            // Convert blob to base64 data URL (service worker compatible)
-            const arrayBuffer = await imageBlob.arrayBuffer();
-            const uint8Array = new Uint8Array(arrayBuffer);
-            let binaryString = '';
-            for (let i = 0; i < uint8Array.length; i++) {
-              binaryString += String.fromCharCode(uint8Array[i]);
+            if (!responseData.success || !responseData.data?.url) {
+              console.error(`Invalid response for ${imageType}:`, responseData);
+              continue;
             }
-            const base64 = btoa(binaryString);
-            const imageUrl = `data:image/png;base64,${base64}`;
+
+            const imageUrl = responseData.data.url;
 
             images.push({
               type: imageType,

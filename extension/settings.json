@@ -219,7 +219,7 @@
   "visualContent": {
     "enabled": true,
     "htmlToImageWorker": {
-      "endpoint": "https://html-to-image-worker.kureckamichal.workers.dev",
+      "endpoint": "https://html-to-image-worker.kureckamichal.workers.dev/render",
       "apiKey": ""
     },
     "imageTypes": {
