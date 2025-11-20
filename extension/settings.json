@@ -112,8 +112,8 @@
     }
   },
   "api": {
-    "provider": "openrouter",
-    "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+    "provider": "backend_proxy",
+    "endpoint": "https://text-processor-api.kureckamichal.workers.dev/api/proxy/openrouter",
     "model": "openai/gpt-4o-mini"
   },
   "ui": {
@@ -219,7 +219,7 @@
   "visualContent": {
     "enabled": true,
     "htmlToImageWorker": {
-      "endpoint": "https://html-to-image-worker.kureckamichal.workers.dev/render",
+      "endpoint": "https://text-processor-api.kureckamichal.workers.dev/api/proxy/html-to-image",
       "apiKey": ""
     },
     "imageTypes": {

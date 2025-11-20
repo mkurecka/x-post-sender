@@ -13,7 +13,7 @@ router.post('/', async (c) => {
     const { event, data } = payload;
 
     console.log('[Webhook] Received event:', event, {
-      dataSize: JSON.stringify(data).length,
+      dataSize: data ? JSON.stringify(data).length : 0,
       timestamp: Date.now()
     });
 

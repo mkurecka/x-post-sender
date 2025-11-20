@@ -126,10 +126,10 @@ tests.test('settings.json has html-to-image-worker endpoint', () => {
     'https://html-to-image.workers.dev',
     'Should not use default non-existent endpoint'
   );
-  tests.assertContains(
-    settings.visualContent.htmlToImageWorker.endpoint,
-    '/render',
-    'Endpoint should include /render path'
+  tests.assert(
+    settings.visualContent.htmlToImageWorker.endpoint.includes('/api/proxy/html-to-image') ||
+    settings.visualContent.htmlToImageWorker.endpoint.includes('/render'),
+    'Endpoint should be proxy or direct worker endpoint'
   );
 });
 
