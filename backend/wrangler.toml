@@ -33,6 +33,8 @@ AIRTABLE_API_KEY = "" # Add your Airtable API key here
 AIRTABLE_BASE_ID = "" # Add your Airtable base ID here
 AIRTABLE_PROFILES_TABLE = "User Profiles" # Table name for user profiles
 AIRTABLE_WEBSITES_TABLE = "Websites" # Table name for websites
+HTML_TO_IMAGE_WORKER_URL = "https://html-to-image-worker.kureckamichal.workers.dev/render"
+HTML_TO_IMAGE_WORKER_API_KEY = "" # Optional API key for html-to-image worker
 
 # Observability
 [observability]
