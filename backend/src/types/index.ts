@@ -11,6 +11,13 @@ export interface Env {
   AIRTABLE_BASE_ID?: string;
   AIRTABLE_PROFILES_TABLE?: string;
   AIRTABLE_WEBSITES_TABLE?: string;
+  // Proxy settings
+  OPENROUTER_API_KEY?: string;
+  HTML_TO_IMAGE_WORKER_URL?: string;
+  HTML_TO_IMAGE_WORKER_API_KEY?: string;
+  APP_URL?: string;
+  // Service bindings
+  HTML_TO_IMAGE_SERVICE?: Fetcher;
 }
 
 // User types

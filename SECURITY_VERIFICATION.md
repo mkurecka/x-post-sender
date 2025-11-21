@@ -17,8 +17,11 @@ npx wrangler secret list
 ```
 
 Expected output:
-- `OPENROUTER_API_KEY` - ✅ Set
-- `HTML_TO_IMAGE_WORKER_API_KEY` - Optional
+- `OPENROUTER_API_KEY` - Set via wrangler secret
+- `HTML_TO_IMAGE_WORKER_API_KEY` - Set via wrangler secret
+
+**Note:** The backend uses **Service Bindings** for Worker-to-Worker communication,
+which doesn't require API keys but they're still used for authentication.
 
 ---
 
@@ -154,6 +157,18 @@ POST /api/proxy/openrouter           ← NO KEYS VISIBLE!
 cd backend
 npx wrangler secret put OPENROUTER_API_KEY
 # Enter your key
+npm run deploy
+```
+
+### Issue: "HTML-to-Image worker error" or "API key is required"
+
+**Cause**: HTML_TO_IMAGE_WORKER_API_KEY not set in backend
+
+**Fix**:
+```bash
+cd backend
+npx wrangler secret put HTML_TO_IMAGE_WORKER_API_KEY
+# Enter your html-to-image worker API key
 npm run deploy
 ```
 

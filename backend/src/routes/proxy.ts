@@ -90,32 +90,62 @@ router.post('/html-to-image', async (c) => {
 
     const workerApiKey = c.env.HTML_TO_IMAGE_WORKER_API_KEY || '';
 
+
     const headers: Record<string, string> = {
       'Content-Type': 'application/json'
     };
 
     if (workerApiKey) {
-      headers['Authorization'] = `Bearer ${workerApiKey}`;
+      headers['X-API-Key'] = workerApiKey;  // Recommended authentication method
     }
 
-    const response = await fetch(workerEndpoint, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        html,
-        width,
-        height,
-        format: format || 'png'
-      })
+    const requestBody = {
+      html,
+      width,
+      height,
+      format: format || 'png'
+    };
+
+    // Use Service Binding if available (for Worker-to-Worker communication)
+    // This avoids the 1042 error when workers try to fetch each other via HTTP
+    const serviceBinding = c.env.HTML_TO_IMAGE_SERVICE;
+
+    console.log('[Proxy] HTML-to-Image request:', {
+      useServiceBinding: !!serviceBinding,
+      bodySize: JSON.stringify(requestBody).length
     });
 
+    let response: Response;
+
+    if (serviceBinding) {
+      // Use Service Binding - direct Worker-to-Worker call
+      response = await serviceBinding.fetch('https://html-to-image-worker/render', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(requestBody)
+      });
+    } else {
+      // Fallback to HTTP fetch (may not work for same-account workers)
+      response = await fetch(workerEndpoint, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(requestBody)
+      });
+    }
+
     if (!response.ok) {
-      const error = await response.text();
-      console.error('[Proxy] HTML-to-Image error:', error);
+      const errorText = await response.text();
+      console.error('[Proxy] HTML-to-Image error:', {
+        status: response.status,
+        statusText: response.statusText,
+        error: errorText,
+        headers: Object.fromEntries(response.headers.entries())
+      });
       return c.json({
         success: false,
         error: 'HTML-to-Image worker error',
-        details: error
+        details: errorText,
+        status: response.status
       }, response.status);
     }
 

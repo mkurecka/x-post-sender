@@ -28,13 +28,18 @@ ENVIRONMENT = "development"
 JWT_SECRET = "change-this-in-production"
 API_VERSION = "v1"
 APP_URL = "https://text-processor.app"
-OPENROUTER_API_KEY = "" # Add your OpenRouter API key here
 AIRTABLE_API_KEY = "" # Add your Airtable API key here
 AIRTABLE_BASE_ID = "" # Add your Airtable base ID here
 AIRTABLE_PROFILES_TABLE = "User Profiles" # Table name for user profiles
 AIRTABLE_WEBSITES_TABLE = "Websites" # Table name for websites
 HTML_TO_IMAGE_WORKER_URL = "https://html-to-image-worker.kureckamichal.workers.dev/render"
-HTML_TO_IMAGE_WORKER_API_KEY = "" # Optional API key for html-to-image worker
+# Note: OPENROUTER_API_KEY and HTML_TO_IMAGE_WORKER_API_KEY are set as secrets via Cloudflare Dashboard
+# Do not add them here as environment variables or they will override the secrets
+
+# Service Bindings - for Worker-to-Worker communication
+[[services]]
+binding = "HTML_TO_IMAGE_SERVICE"
+service = "html-to-image-worker"
 
 # Observability
 [observability]
