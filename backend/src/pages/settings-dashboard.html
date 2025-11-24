@@ -721,6 +721,66 @@
           </div>
         </div>
       </div>
+
+      <!-- Database & Settings Info -->
+      <div class="content-grid" style="margin-top: 24px;">
+        <!-- Webhook Events -->
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">Webhook Events</h2>
+            <button class="btn btn-secondary" style="padding: 8px 16px; font-size: 13px;" onclick="loadStats()">
+              <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+              </svg>
+              Reload
+            </button>
+          </div>
+          <div class="card-body">
+            <div id="webhookEventsContent">
+              <div class="empty-state">
+                <div class="empty-icon">📡</div>
+                <div class="empty-title">No webhook events yet</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Settings Details -->
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">Settings Configuration</h2>
+          </div>
+          <div class="card-body">
+            <div id="settingsDetailsContent">
+              <div class="empty-state">
+                <div class="empty-icon">⚙️</div>
+                <div class="empty-title">Loading settings...</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recent Activity -->
+      <div class="card" style="margin-top: 24px;">
+        <div class="card-header">
+          <h2 class="card-title">Recent Activity</h2>
+          <button class="btn btn-secondary" style="padding: 8px 16px; font-size: 13px;" onclick="loadStats()">
+            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+            Reload
+          </button>
+        </div>
+        <div class="card-body">
+          <div id="recentActivityContent">
+            <div class="empty-state">
+              <div class="empty-icon">📊</div>
+              <div class="empty-title">No recent activity</div>
+            </div>
+          </div>
+        </div>
+      </div>
     </main>
   </div>
 
@@ -739,9 +799,153 @@
       await Promise.all([
         loadUserInfo(),
         loadSettings(),
+        loadStats(),
         loadHistory(),
         loadProfiles()
       ]);
+    }
+
+    // Load database stats
+    async function loadStats() {
+      try {
+        const response = await fetch(`${API_BASE}/api/settings/stats`, {
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        const data = await response.json();
+
+        if (data.success && data.stats) {
+          const stats = data.stats;
+
+          // Update stats cards with real data
+          document.getElementById('totalSettings').textContent = stats.settings.configured || 0;
+          document.getElementById('historyTotal').textContent = stats.webhooks.total || 0;
+          document.getElementById('historyCount').textContent = stats.webhooks.total || 0;
+
+          // Update posts breakdown
+          const postsBreakdown = `${stats.posts.tweets} tweets, ${stats.posts.videos} videos, ${stats.posts.memory} memories`;
+          document.getElementById('historyChange').textContent = postsBreakdown;
+
+          // Update settings info
+          document.getElementById('profilesChange').textContent = `${stats.settings.accounts} accounts configured`;
+
+          // Display webhook events
+          displayWebhookEvents(stats.webhooks.events);
+
+          // Display settings details
+          displaySettingsDetails(stats.settings);
+
+          // Display recent activity
+          displayRecentActivity(stats.recentActivity);
+        }
+      } catch (error) {
+        console.error('Failed to load stats:', error);
+      }
+    }
+
+    // Display webhook events
+    function displayWebhookEvents(events) {
+      const container = document.getElementById('webhookEventsContent');
+
+      if (!events || events.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-icon">📡</div>
+            <div class="empty-title">No webhook events yet</div>
+            <div class="empty-desc">Events will appear here when webhooks are triggered</div>
+          </div>
+        `;
+        return;
+      }
+
+      const maxCount = Math.max(...events.map(e => e.count));
+      const eventsList = events.map(event => {
+        const percentage = (event.count / maxCount) * 100;
+        const eventName = event.event.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+
+        return `
+          <div style="margin-bottom: 16px;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+              <span style="font-size: 13px; font-weight: 500; color: var(--text-dark);">${eventName}</span>
+              <span style="font-size: 13px; font-weight: 600; color: var(--primary-green);">${event.count}</span>
+            </div>
+            <div style="background: var(--bg-gray); height: 8px; border-radius: 4px; overflow: hidden;">
+              <div style="background: linear-gradient(90deg, var(--primary-green), var(--secondary-green)); height: 100%; width: ${percentage}%; transition: width 0.3s;"></div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      container.innerHTML = eventsList;
+    }
+
+    // Display settings details
+    function displaySettingsDetails(settings) {
+      const container = document.getElementById('settingsDetailsContent');
+
+      const settingsItems = [
+        { label: 'Accounts', value: settings.accounts || 0, icon: '👥' },
+        { label: 'Webhook Enabled', value: settings.webhook?.enabled ? 'Yes' : 'No', icon: '📡' },
+        { label: 'Webhook URL', value: settings.webhook?.url ? 'Configured' : 'Not set', icon: '🔗' },
+        { label: 'Content Model', value: settings.models?.contentModel || 'Default', icon: '🤖' },
+        { label: 'Image Model', value: settings.models?.imageModel || 'Default', icon: '🖼️' },
+      ];
+
+      const settingsList = settingsItems.map(item => `
+        <div style="display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--border-gray);">
+          <span style="font-size: 14px; color: var(--text-gray);">
+            <span style="margin-right: 8px;">${item.icon}</span>
+            ${item.label}
+          </span>
+          <span style="font-size: 14px; font-weight: 600; color: var(--text-dark);">${item.value}</span>
+        </div>
+      `).join('');
+
+      container.innerHTML = settingsList;
+    }
+
+    // Display recent activity
+    function displayRecentActivity(activity) {
+      const container = document.getElementById('recentActivityContent');
+
+      if (!activity || activity.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-icon">📊</div>
+            <div class="empty-title">No recent activity</div>
+            <div class="empty-desc">Your activity will appear here</div>
+          </div>
+        `;
+        return;
+      }
+
+      const activityList = activity.map(item => {
+        const date = new Date(item.timestamp);
+        const timeAgo = getTimeAgo(date);
+        const typeName = item.type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+        const modeName = item.mode ? ` - ${item.mode.replace(/_/g, ' ')}` : '';
+
+        const typeIcons = {
+          'tweet': '🐦',
+          'youtube_video': '📹',
+          'memory': '💾',
+          'processed': '⚡',
+          'visual_content': '🎨'
+        };
+
+        const icon = typeIcons[item.type] || '📄';
+
+        return `
+          <div style="display: flex; align-items: center; gap: 12px; padding: 12px; background: var(--bg-gray); border-radius: 8px; margin-bottom: 8px;">
+            <div style="font-size: 24px;">${icon}</div>
+            <div style="flex: 1;">
+              <div style="font-size: 14px; font-weight: 600; color: var(--text-dark);">${typeName}${modeName}</div>
+              <div style="font-size: 12px; color: var(--text-light);">${timeAgo}</div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      container.innerHTML = activityList;
     }
 
     // Load user info

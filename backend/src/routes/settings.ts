@@ -311,6 +311,92 @@ settings.put('/webhook', authMiddleware, async (c) => {
   }
 });
 
+// GET /api/settings/stats - Get dashboard statistics
+settings.get('/stats', authMiddleware, async (c) => {
+  try {
+    const userId = c.get('userId');
+
+    // Get counts from database
+    const [postsCount, memoryCount, webhooksCount, tweetsCount, videosCount] = await Promise.all([
+      c.env.DB.prepare('SELECT COUNT(*) as count FROM posts WHERE user_id = ?').bind(userId).first<any>(),
+      c.env.DB.prepare('SELECT COUNT(*) as count FROM posts WHERE user_id = ? AND type = ?').bind(userId, 'memory').first<any>(),
+      c.env.DB.prepare('SELECT COUNT(*) as count FROM webhooks WHERE user_id = ?').bind(userId).first<any>(),
+      c.env.DB.prepare('SELECT COUNT(*) as count FROM posts WHERE user_id = ? AND type = ?').bind(userId, 'tweet').first<any>(),
+      c.env.DB.prepare('SELECT COUNT(*) as count FROM posts WHERE user_id = ? AND type = ?').bind(userId, 'youtube_video').first<any>(),
+    ]);
+
+    // Get recent activity
+    const recentPosts = await c.env.DB
+      .prepare('SELECT type, mode, created_at FROM posts WHERE user_id = ? ORDER BY created_at DESC LIMIT 10')
+      .bind(userId)
+      .all();
+
+    // Get webhook events breakdown
+    const webhookEvents = await c.env.DB
+      .prepare(`
+        SELECT event, COUNT(*) as count
+        FROM webhooks
+        WHERE user_id = ?
+        GROUP BY event
+        ORDER BY count DESC
+        LIMIT 10
+      `)
+      .bind(userId)
+      .all();
+
+    // Get settings
+    const user = await c.env.DB
+      .prepare('SELECT settings_json FROM users WHERE id = ?')
+      .bind(userId)
+      .first<any>();
+
+    let userSettings: UserSettings = {};
+    if (user?.settings_json) {
+      try {
+        userSettings = JSON.parse(user.settings_json);
+      } catch (e) {
+        console.error('Failed to parse user settings:', e);
+      }
+    }
+
+    return c.json({
+      success: true,
+      stats: {
+        posts: {
+          total: postsCount?.count || 0,
+          memory: memoryCount?.count || 0,
+          tweets: tweetsCount?.count || 0,
+          videos: videosCount?.count || 0,
+        },
+        webhooks: {
+          total: webhooksCount?.count || 0,
+          events: webhookEvents.results?.map((row: any) => ({
+            event: row.event,
+            count: row.count,
+          })) || [],
+        },
+        recentActivity: recentPosts.results?.map((row: any) => ({
+          type: row.type,
+          mode: row.mode,
+          timestamp: row.created_at,
+        })) || [],
+        settings: {
+          configured: Object.keys(userSettings).length,
+          webhook: userSettings.webhook || {},
+          models: userSettings.models || {},
+          accounts: userSettings.accounts?.length || 0,
+        },
+      },
+    });
+  } catch (error: any) {
+    console.error('Get stats error:', error);
+    return c.json({
+      success: false,
+      error: error.message || 'Failed to get stats',
+    }, 500);
+  }
+});
+
 // Helper function to deep merge objects
 function deepMerge(target: any, source: any): any {
   const output = { ...target };
