@@ -16,6 +16,7 @@ export interface Env {
   HTML_TO_IMAGE_WORKER_URL?: string;
   HTML_TO_IMAGE_WORKER_API_KEY?: string;
   APP_URL?: string;
+  RAILWAY_WEBHOOK_URL?: string;
   // Service bindings
   HTML_TO_IMAGE_SERVICE?: Fetcher;
 }

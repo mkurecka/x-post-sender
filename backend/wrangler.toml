@@ -33,6 +33,7 @@ AIRTABLE_BASE_ID = "" # Add your Airtable base ID here
 AIRTABLE_PROFILES_TABLE = "User Profiles" # Table name for user profiles
 AIRTABLE_WEBSITES_TABLE = "Websites" # Table name for websites
 HTML_TO_IMAGE_WORKER_URL = "https://html-to-image-worker.kureckamichal.workers.dev/render"
+RAILWAY_WEBHOOK_URL = "https://primary-production-3ce13.up.railway.app/api/v1/webhook"
 # Note: OPENROUTER_API_KEY and HTML_TO_IMAGE_WORKER_API_KEY are set as secrets via Cloudflare Dashboard
 # Do not add them here as environment variables or they will override the secrets
 
