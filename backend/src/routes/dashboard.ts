@@ -1,16 +1,22 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { dashboardPage } from '../templates/pages/dashboard';
+import { memoriesPage } from '../templates/pages/memories';
+import { tweetsPage } from '../templates/pages/tweets';
+import { videosPage } from '../templates/pages/videos';
+import { aiContentPage } from '../templates/pages/ai-content';
 
 const router = new Hono<{ Bindings: Env }>();
 
+// Use actual Worker URL for API calls
+const apiBase = 'https://text-processor-api.kureckamichal.workers.dev';
+
 /**
  * GET /dashboard
- * Public dashboard view (shows stats without authentication)
+ * Main dashboard overview page
  */
 router.get('/', async (c) => {
   try {
-    // Get public stats (without user-specific data)
     const [postsCount, memoryCount, webhooksCount, usersCount, tweetsCount, videosCount] = await Promise.all([
       c.env.DB.prepare('SELECT COUNT(*) as count FROM posts').first<any>(),
       c.env.DB.prepare('SELECT COUNT(*) as count FROM memory').first<any>(),
@@ -35,38 +41,119 @@ router.get('/', async (c) => {
       },
     };
 
-    // Use actual Worker URL for API calls, not APP_URL which may be a custom domain
-    const apiBase = 'https://text-processor-api.kureckamichal.workers.dev';
-
     const html = dashboardPage({ stats, apiBase });
-
     return c.html(html);
 
   } catch (error: any) {
     console.error('Dashboard error:', error);
-
-    return c.html(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Dashboard Error</title>
-        <style>
-          body { font-family: system-ui; padding: 2rem; max-width: 600px; margin: 0 auto; }
-          .error { background: #fee; color: #c00; padding: 1rem; border-radius: 8px; }
-        </style>
-      </head>
-      <body>
-        <h1>Dashboard Error</h1>
-        <div class="error">
-          <strong>Error:</strong> ${error.message || 'Failed to load dashboard'}
-        </div>
-        <p style="margin-top: 1rem; color: #666;">
-          Please check the server logs for more details.
-        </p>
-      </body>
-      </html>
-    `, 500);
+    return c.html(errorPage('Dashboard Error', error.message), 500);
   }
 });
+
+/**
+ * GET /dashboard/memories
+ * Memories listing page
+ */
+router.get('/memories', async (c) => {
+  try {
+    const result = await c.env.DB.prepare('SELECT COUNT(*) as count FROM memory').first<any>();
+    const count = result?.count || 0;
+
+    const html = memoriesPage({ count, apiBase });
+    return c.html(html);
+
+  } catch (error: any) {
+    console.error('Memories page error:', error);
+    return c.html(errorPage('Memories Error', error.message), 500);
+  }
+});
+
+/**
+ * GET /dashboard/tweets
+ * Tweets listing page
+ */
+router.get('/tweets', async (c) => {
+  try {
+    const result = await c.env.DB.prepare(
+      'SELECT COUNT(*) as count FROM posts WHERE type = ?'
+    ).bind('tweet').first<any>();
+    const count = result?.count || 0;
+
+    const html = tweetsPage({ count, apiBase });
+    return c.html(html);
+
+  } catch (error: any) {
+    console.error('Tweets page error:', error);
+    return c.html(errorPage('Tweets Error', error.message), 500);
+  }
+});
+
+/**
+ * GET /dashboard/videos
+ * Videos listing page
+ */
+router.get('/videos', async (c) => {
+  try {
+    const result = await c.env.DB.prepare(
+      'SELECT COUNT(*) as count FROM posts WHERE type = ?'
+    ).bind('youtube_video').first<any>();
+    const count = result?.count || 0;
+
+    const html = videosPage({ count, apiBase });
+    return c.html(html);
+
+  } catch (error: any) {
+    console.error('Videos page error:', error);
+    return c.html(errorPage('Videos Error', error.message), 500);
+  }
+});
+
+/**
+ * GET /dashboard/ai-content
+ * AI-generated content listing page
+ */
+router.get('/ai-content', async (c) => {
+  try {
+    const result = await c.env.DB.prepare(
+      'SELECT COUNT(*) as count FROM posts WHERE generated_output IS NOT NULL AND generated_output != ?'
+    ).bind('').first<any>();
+    const count = result?.count || 0;
+
+    const html = aiContentPage({ count, apiBase });
+    return c.html(html);
+
+  } catch (error: any) {
+    console.error('AI Content page error:', error);
+    return c.html(errorPage('AI Content Error', error.message), 500);
+  }
+});
+
+/**
+ * Error page helper
+ */
+function errorPage(title: string, message: string): string {
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>${title}</title>
+      <style>
+        body { font-family: system-ui; padding: 2rem; max-width: 600px; margin: 0 auto; }
+        .error { background: #fee; color: #c00; padding: 1rem; border-radius: 8px; }
+        a { color: #065f4a; }
+      </style>
+    </head>
+    <body>
+      <h1>${title}</h1>
+      <div class="error">
+        <strong>Error:</strong> ${message || 'An unexpected error occurred'}
+      </div>
+      <p style="margin-top: 1rem;">
+        <a href="/dashboard">← Back to Dashboard</a>
+      </p>
+    </body>
+    </html>
+  `;
+}
 
 export default router;
