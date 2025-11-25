@@ -1,0 +1,17 @@
+{
+  "name": "universal-text-processor-extension",
+  "version": "2.2.0",
+  "description": "Chrome Extension for Universal Text Processor",
+  "private": true,
+  "scripts": {
+    "lint": "eslint . --ext .js",
+    "lint:fix": "eslint . --ext .js --fix",
+    "type-check": "tsc --noEmit",
+    "check": "npm run type-check && npm run lint",
+    "precommit": "npm run check"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.0",
+    "typescript": "^5.7.3"
+  }
+}

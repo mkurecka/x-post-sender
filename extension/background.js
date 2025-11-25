@@ -1,3 +1,4 @@
+/* global settingsManager, apiClient, generateTemplate, getImageSpec */
 // Import settings manager, API client, and template generators
 importScripts('settings-manager.js', 'api-client.js', 'template-generators.js');
 

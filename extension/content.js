@@ -148,14 +148,6 @@ function createFloatingButton() {
     });
   });
 
-  // Close menu when clicking outside
-  document.addEventListener('click', () => {
-    if (menuOpen) {
-      menuOpen = false;
-      fab.classList.remove('utp-fab-menu-open');
-    }
-  });
-
   return fab;
 }
 
@@ -899,7 +891,7 @@ async function processText(text, context, mode, actionParams, language, comment,
               originalText: text,
               generatedOutput: response.content,
               mode: mode,
-              account: account,
+              account: actionParams.account || 'default',
               language: language,
               comment: comment,
               context: context
