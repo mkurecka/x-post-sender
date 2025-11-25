@@ -6,6 +6,8 @@ import { tweetsPage } from '../templates/pages/tweets';
 import { videosPage } from '../templates/pages/videos';
 import { aiContentPage } from '../templates/pages/ai-content';
 import { webhooksPage } from '../templates/pages/webhooks';
+import { profilesPage } from '../templates/pages/profiles';
+import { AirtableService } from '../services/airtable';
 
 const router = new Hono<{ Bindings: Env }>();
 
@@ -146,6 +148,40 @@ router.get('/webhooks', async (c) => {
   } catch (error: any) {
     console.error('Webhooks page error:', error);
     return c.html(errorPage('Webhooks Error', error.message), 500);
+  }
+});
+
+/**
+ * GET /dashboard/profiles
+ * Airtable profiles and websites page
+ */
+router.get('/profiles', async (c) => {
+  try {
+    const airtable = new AirtableService(c.env);
+    const configured = airtable.isConfigured();
+
+    let profilesCount = 0;
+    let websitesCount = 0;
+
+    if (configured) {
+      try {
+        const [profiles, websites] = await Promise.all([
+          airtable.listUserProfiles(),
+          airtable.listWebsites()
+        ]);
+        profilesCount = profiles.length;
+        websitesCount = websites.length;
+      } catch (error) {
+        console.error('Error fetching Airtable data:', error);
+      }
+    }
+
+    const html = profilesPage({ profilesCount, websitesCount, apiBase, configured });
+    return c.html(html);
+
+  } catch (error: any) {
+    console.error('Profiles page error:', error);
+    return c.html(errorPage('Profiles Error', error.message), 500);
   }
 });
 

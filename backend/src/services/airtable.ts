@@ -1,6 +1,6 @@
 /**
  * Airtable Service - Handles all Airtable API operations
- * Uses MCP Airtable tools for data access
+ * Uses direct Airtable REST API calls
  * Implements caching in KV for performance
  */
 
@@ -11,6 +11,8 @@ import type {
   AirtableConfig,
   AirtableSyncStatus
 } from '../types';
+
+const AIRTABLE_API_BASE = 'https://api.airtable.com/v0';
 
 export class AirtableService {
   private env: Env;
@@ -29,6 +31,41 @@ export class AirtableService {
       cacheTtl: this.DEFAULT_TTL,
       syncInterval: 3600000 // 1 hour
     };
+  }
+
+  /**
+   * Check if Airtable is configured
+   */
+  isConfigured(): boolean {
+    return Boolean(this.env.AIRTABLE_API_KEY && this.config.baseId);
+  }
+
+  /**
+   * Make authenticated request to Airtable API
+   */
+  private async airtableFetch(endpoint: string, options: RequestInit = {}): Promise<any> {
+    if (!this.env.AIRTABLE_API_KEY) {
+      throw new Error('Airtable API key not configured');
+    }
+
+    const url = `${AIRTABLE_API_BASE}/${this.config.baseId}/${endpoint}`;
+
+    const response = await fetch(url, {
+      ...options,
+      headers: {
+        'Authorization': `Bearer ${this.env.AIRTABLE_API_KEY}`,
+        'Content-Type': 'application/json',
+        ...options.headers
+      }
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      console.error(`[Airtable] API error: ${response.status}`, error);
+      throw new Error(`Airtable API error: ${response.status} - ${error}`);
+    }
+
+    return response.json();
   }
 
   /**
@@ -78,7 +115,6 @@ export class AirtableService {
     try {
       const key = this.getCacheKey(type, id);
       await this.env.CACHE.delete(key);
-      // Also invalidate the "all" cache
       if (id) {
         await this.env.CACHE.delete(this.getCacheKey(type));
       }
@@ -97,20 +133,19 @@ export class AirtableService {
     return {
       id: record.id,
       userId: fields.userId || fields.user_id || '',
-      name: fields.name || '',
-      displayName: fields.displayName || fields.display_name,
-      email: fields.email,
+      name: fields.name || fields.Name || '',
+      displayName: fields.displayName || fields.display_name || fields.DisplayName,
+      email: fields.email || fields.Email,
       accounts: Array.isArray(fields.accounts) ? fields.accounts :
-                typeof fields.accounts === 'string' ? fields.accounts.split(',').map((s: string) => s.trim()) : [],
-      writingProfile: typeof fields.writingProfile === 'string' ?
-                      JSON.parse(fields.writingProfile) : fields.writingProfile,
-      brandingColors: typeof fields.brandingColors === 'string' ?
-                      JSON.parse(fields.brandingColors) : fields.brandingColors,
-      logoUrl: fields.logoUrl || fields.logo_url,
-      defaultLanguage: fields.defaultLanguage || fields.default_language || 'english',
-      enabled: fields.enabled !== false,
-      createdAt: fields.createdAt || fields.created_at,
-      updatedAt: fields.updatedAt || fields.updated_at
+                typeof fields.accounts === 'string' ? fields.accounts.split(',').map((s: string) => s.trim()) :
+                Array.isArray(fields.Accounts) ? fields.Accounts : [],
+      writingProfile: this.parseJSON(fields.writingProfile || fields.WritingProfile),
+      brandingColors: this.parseJSON(fields.brandingColors || fields.BrandingColors),
+      logoUrl: fields.logoUrl || fields.logo_url || fields.LogoUrl,
+      defaultLanguage: fields.defaultLanguage || fields.default_language || fields.DefaultLanguage || 'english',
+      enabled: fields.enabled !== false && fields.Enabled !== false,
+      createdAt: fields.createdAt || fields.created_at || fields.Created,
+      updatedAt: fields.updatedAt || fields.updated_at || fields.Modified
     };
   }
 
@@ -122,50 +157,59 @@ export class AirtableService {
 
     return {
       id: record.id,
-      websiteId: fields.websiteId || fields.website_id || '',
-      name: fields.name || '',
-      domain: fields.domain || '',
-      userId: fields.userId || fields.user_id || '',
-      userProfileId: fields.userProfileId || fields.user_profile_id,
-      socialProfiles: typeof fields.socialProfiles === 'string' ?
-                     JSON.parse(fields.socialProfiles) : fields.socialProfiles || [],
-      schedulingWebhook: fields.schedulingWebhook || fields.scheduling_webhook,
-      enabled: fields.enabled !== false,
-      createdAt: fields.createdAt || fields.created_at,
-      updatedAt: fields.updatedAt || fields.updated_at
+      websiteId: fields.websiteId || fields.website_id || fields.WebsiteId || '',
+      name: fields.name || fields.Name || '',
+      domain: fields.domain || fields.Domain || '',
+      userId: fields.userId || fields.user_id || fields.UserId || '',
+      userProfileId: fields.userProfileId || fields.user_profile_id || fields.UserProfileId,
+      socialProfiles: this.parseJSON(fields.socialProfiles || fields.SocialProfiles) || [],
+      schedulingWebhook: fields.schedulingWebhook || fields.scheduling_webhook || fields.SchedulingWebhook,
+      enabled: fields.enabled !== false && fields.Enabled !== false,
+      createdAt: fields.createdAt || fields.created_at || fields.Created,
+      updatedAt: fields.updatedAt || fields.updated_at || fields.Modified
     };
+  }
+
+  /**
+   * Safely parse JSON string
+   */
+  private parseJSON(value: any): any {
+    if (!value) return null;
+    if (typeof value === 'object') return value;
+    try {
+      return JSON.parse(value);
+    } catch {
+      return null;
+    }
   }
 
   /**
    * List all user profiles from Airtable
    */
   async listUserProfiles(useCache = true): Promise<AirtableUserProfile[]> {
+    if (!this.isConfigured()) {
+      console.log('[Airtable] Not configured, returning empty profiles');
+      return [];
+    }
+
     const cacheKey = this.getCacheKey('profiles');
 
-    // Try cache first
     if (useCache) {
       const cached = await this.getFromCache<AirtableUserProfile[]>(cacheKey);
       if (cached) return cached;
     }
 
     try {
-      // Note: This would use MCP tools in actual implementation
-      // For now, returning structure that backend will populate
       console.log('[Airtable] Fetching user profiles from Airtable');
+      const tableName = encodeURIComponent(this.config.tables.profiles);
+      const result = await this.airtableFetch(`${tableName}?filterByFormula=NOT({enabled}=FALSE())`);
 
-      // In real implementation, this would call MCP:
-      // const result = await mcp__airtable__list_records({
-      //   baseId: this.config.baseId,
-      //   tableId: this.config.tables.profiles,
-      //   filterByFormula: "{enabled} = TRUE()"
-      // });
-
-      const profiles: AirtableUserProfile[] = [];
-      // profiles = result.records.map(r => this.parseUserProfile(r));
-
+      const profiles = (result.records || []).map((r: any) => this.parseUserProfile(r));
       await this.setCache(cacheKey, profiles);
+
+      console.log(`[Airtable] Fetched ${profiles.length} profiles`);
       return profiles;
-    } catch (error) {
+    } catch (error: any) {
       console.error('[Airtable] Error fetching user profiles:', error);
       throw new Error(`Failed to fetch user profiles: ${error.message}`);
     }
@@ -175,9 +219,10 @@ export class AirtableService {
    * Get specific user profile by ID
    */
   async getUserProfile(profileId: string, useCache = true): Promise<AirtableUserProfile | null> {
+    if (!this.isConfigured()) return null;
+
     const cacheKey = this.getCacheKey('profile', profileId);
 
-    // Try cache first
     if (useCache) {
       const cached = await this.getFromCache<AirtableUserProfile>(cacheKey);
       if (cached) return cached;
@@ -185,20 +230,13 @@ export class AirtableService {
 
     try {
       console.log(`[Airtable] Fetching profile ${profileId}`);
+      const tableName = encodeURIComponent(this.config.tables.profiles);
+      const result = await this.airtableFetch(`${tableName}/${profileId}`);
 
-      // In real implementation:
-      // const result = await mcp__airtable__get_record({
-      //   baseId: this.config.baseId,
-      //   tableId: this.config.tables.profiles,
-      //   recordId: profileId
-      // });
-
-      // const profile = this.parseUserProfile(result);
-      // await this.setCache(cacheKey, profile);
-      // return profile;
-
-      return null;
-    } catch (error) {
+      const profile = this.parseUserProfile(result);
+      await this.setCache(cacheKey, profile);
+      return profile;
+    } catch (error: any) {
       console.error(`[Airtable] Error fetching profile ${profileId}:`, error);
       return null;
     }
@@ -208,9 +246,10 @@ export class AirtableService {
    * Get user profile by userId field
    */
   async getUserProfileByUserId(userId: string, useCache = true): Promise<AirtableUserProfile | null> {
+    if (!this.isConfigured()) return null;
+
     const cacheKey = this.getCacheKey('profile', `user:${userId}`);
 
-    // Try cache first
     if (useCache) {
       const cached = await this.getFromCache<AirtableUserProfile>(cacheKey);
       if (cached) return cached;
@@ -218,21 +257,16 @@ export class AirtableService {
 
     try {
       console.log(`[Airtable] Fetching profile for userId ${userId}`);
+      const tableName = encodeURIComponent(this.config.tables.profiles);
+      const formula = encodeURIComponent(`{userId}="${userId}"`);
+      const result = await this.airtableFetch(`${tableName}?filterByFormula=${formula}&maxRecords=1`);
 
-      // In real implementation:
-      // const result = await mcp__airtable__search_records({
-      //   baseId: this.config.baseId,
-      //   tableId: this.config.tables.profiles,
-      //   filterByFormula: `{userId} = "${userId}"`
-      // });
+      if (!result.records || result.records.length === 0) return null;
 
-      // if (result.records.length === 0) return null;
-      // const profile = this.parseUserProfile(result.records[0]);
-      // await this.setCache(cacheKey, profile);
-      // return profile;
-
-      return null;
-    } catch (error) {
+      const profile = this.parseUserProfile(result.records[0]);
+      await this.setCache(cacheKey, profile);
+      return profile;
+    } catch (error: any) {
       console.error(`[Airtable] Error fetching profile for user ${userId}:`, error);
       return null;
     }
@@ -245,10 +279,11 @@ export class AirtableService {
     profileId: string,
     updates: Partial<AirtableUserProfile>
   ): Promise<AirtableUserProfile | null> {
+    if (!this.isConfigured()) return null;
+
     try {
       console.log(`[Airtable] Updating profile ${profileId}`);
 
-      // Prepare fields for Airtable
       const fields: any = {};
       if (updates.name) fields.name = updates.name;
       if (updates.displayName) fields.displayName = updates.displayName;
@@ -260,22 +295,17 @@ export class AirtableService {
       if (updates.defaultLanguage) fields.defaultLanguage = updates.defaultLanguage;
       if (updates.enabled !== undefined) fields.enabled = updates.enabled;
 
-      // In real implementation:
-      // const result = await mcp__airtable__update_records({
-      //   baseId: this.config.baseId,
-      //   tableId: this.config.tables.profiles,
-      //   records: [{ id: profileId, fields }]
-      // });
+      const tableName = encodeURIComponent(this.config.tables.profiles);
+      const result = await this.airtableFetch(`${tableName}/${profileId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ fields })
+      });
 
-      // Invalidate cache
       await this.invalidateCache('profile', profileId);
       await this.invalidateCache('profiles');
 
-      // const updated = this.parseUserProfile(result.records[0]);
-      // return updated;
-
-      return null;
-    } catch (error) {
+      return this.parseUserProfile(result);
+    } catch (error: any) {
       console.error(`[Airtable] Error updating profile ${profileId}:`, error);
       throw new Error(`Failed to update profile: ${error.message}`);
     }
@@ -285,9 +315,10 @@ export class AirtableService {
    * Get website data by website ID
    */
   async getWebsiteData(websiteId: string, useCache = true): Promise<AirtableWebsite | null> {
+    if (!this.isConfigured()) return null;
+
     const cacheKey = this.getCacheKey('website', websiteId);
 
-    // Try cache first
     if (useCache) {
       const cached = await this.getFromCache<AirtableWebsite>(cacheKey);
       if (cached) return cached;
@@ -295,21 +326,16 @@ export class AirtableService {
 
     try {
       console.log(`[Airtable] Fetching website ${websiteId}`);
+      const tableName = encodeURIComponent(this.config.tables.websites);
+      const formula = encodeURIComponent(`{websiteId}="${websiteId}"`);
+      const result = await this.airtableFetch(`${tableName}?filterByFormula=${formula}&maxRecords=1`);
 
-      // In real implementation:
-      // const result = await mcp__airtable__search_records({
-      //   baseId: this.config.baseId,
-      //   tableId: this.config.tables.websites,
-      //   filterByFormula: `{websiteId} = "${websiteId}"`
-      // });
+      if (!result.records || result.records.length === 0) return null;
 
-      // if (result.records.length === 0) return null;
-      // const website = this.parseWebsite(result.records[0]);
-      // await this.setCache(cacheKey, website);
-      // return website;
-
-      return null;
-    } catch (error) {
+      const website = this.parseWebsite(result.records[0]);
+      await this.setCache(cacheKey, website);
+      return website;
+    } catch (error: any) {
       console.error(`[Airtable] Error fetching website ${websiteId}:`, error);
       return null;
     }
@@ -319,9 +345,13 @@ export class AirtableService {
    * List all websites
    */
   async listWebsites(useCache = true): Promise<AirtableWebsite[]> {
+    if (!this.isConfigured()) {
+      console.log('[Airtable] Not configured, returning empty websites');
+      return [];
+    }
+
     const cacheKey = this.getCacheKey('websites');
 
-    // Try cache first
     if (useCache) {
       const cached = await this.getFromCache<AirtableWebsite[]>(cacheKey);
       if (cached) return cached;
@@ -329,20 +359,15 @@ export class AirtableService {
 
     try {
       console.log('[Airtable] Fetching websites from Airtable');
+      const tableName = encodeURIComponent(this.config.tables.websites);
+      const result = await this.airtableFetch(`${tableName}?filterByFormula=NOT({enabled}=FALSE())`);
 
-      // In real implementation:
-      // const result = await mcp__airtable__list_records({
-      //   baseId: this.config.baseId,
-      //   tableId: this.config.tables.websites,
-      //   filterByFormula: "{enabled} = TRUE()"
-      // });
-
-      const websites: AirtableWebsite[] = [];
-      // websites = result.records.map(r => this.parseWebsite(r));
-
+      const websites = (result.records || []).map((r: any) => this.parseWebsite(r));
       await this.setCache(cacheKey, websites);
+
+      console.log(`[Airtable] Fetched ${websites.length} websites`);
       return websites;
-    } catch (error) {
+    } catch (error: any) {
       console.error('[Airtable] Error fetching websites:', error);
       throw new Error(`Failed to fetch websites: ${error.message}`);
     }
@@ -358,23 +383,21 @@ export class AirtableService {
     try {
       console.log('[Airtable] Starting full sync...');
 
-      // Sync profiles
       let profilesCount = 0;
       try {
         const profiles = await this.listUserProfiles(false);
         profilesCount = profiles.length;
         console.log(`[Airtable] Synced ${profilesCount} profiles`);
-      } catch (error) {
+      } catch (error: any) {
         errors.push(`Profiles sync failed: ${error.message}`);
       }
 
-      // Sync websites
       let websitesCount = 0;
       try {
         const websites = await this.listWebsites(false);
         websitesCount = websites.length;
         console.log(`[Airtable] Synced ${websitesCount} websites`);
-      } catch (error) {
+      } catch (error: any) {
         errors.push(`Websites sync failed: ${error.message}`);
       }
 
@@ -386,12 +409,11 @@ export class AirtableService {
         errors: errors.length > 0 ? errors : undefined
       };
 
-      // Cache sync status
-      await this.setCache('sync:status', status, 3600); // 1 hour
+      await this.setCache('sync:status', status, 3600);
 
       console.log(`[Airtable] Sync completed in ${Date.now() - startTime}ms`);
       return status;
-    } catch (error) {
+    } catch (error: any) {
       console.error('[Airtable] Sync error:', error);
       return {
         lastSyncAt: Date.now(),
@@ -415,19 +437,13 @@ export class AirtableService {
    */
   async healthCheck(): Promise<boolean> {
     try {
-      if (!this.config.baseId) {
-        console.error('[Airtable] Base ID not configured');
+      if (!this.isConfigured()) {
+        console.log('[Airtable] Not configured');
         return false;
       }
 
-      // Try to list records with limit 1
-      // In real implementation:
-      // await mcp__airtable__list_records({
-      //   baseId: this.config.baseId,
-      //   tableId: this.config.tables.profiles,
-      //   maxRecords: 1
-      // });
-
+      const tableName = encodeURIComponent(this.config.tables.profiles);
+      await this.airtableFetch(`${tableName}?maxRecords=1`);
       return true;
     } catch (error) {
       console.error('[Airtable] Health check failed:', error);

@@ -11,9 +11,31 @@ import { verifyJWT } from '../utils/jwt';
 const app = new Hono<{ Bindings: Env }>();
 
 /**
- * Authentication middleware
+ * Authentication middleware (optional for read operations)
+ * Dashboard pages can access without auth, authenticated requests get user context
  */
-async function authMiddleware(c: any, next: any) {
+async function optionalAuthMiddleware(c: any, next: any) {
+  const authHeader = c.req.header('Authorization');
+  if (authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.substring(7);
+    try {
+      const payload = await verifyJWT(token, c.env.JWT_SECRET);
+      if (payload) {
+        c.set('userId', payload.userId);
+        c.set('userEmail', payload.email);
+      }
+    } catch (err: any) {
+      // Continue without auth for dashboard access
+      console.log('[Airtable Routes] Optional auth failed, continuing without auth');
+    }
+  }
+  await next();
+}
+
+/**
+ * Required authentication middleware (for write operations)
+ */
+async function requireAuthMiddleware(c: any, next: any) {
   const authHeader = c.req.header('Authorization');
   if (!authHeader?.startsWith('Bearer ')) {
     return c.json({
@@ -40,8 +62,8 @@ async function authMiddleware(c: any, next: any) {
   }
 }
 
-// Apply auth middleware to all routes
-app.use('*', authMiddleware);
+// Apply optional auth middleware to GET routes (dashboard access)
+app.use('*', optionalAuthMiddleware);
 
 /**
  * GET /api/airtable/profiles
