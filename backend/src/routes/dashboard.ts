@@ -5,6 +5,7 @@ import { memoriesPage } from '../templates/pages/memories';
 import { tweetsPage } from '../templates/pages/tweets';
 import { videosPage } from '../templates/pages/videos';
 import { aiContentPage } from '../templates/pages/ai-content';
+import { aiImagesPage } from '../templates/pages/ai-images';
 import { webhooksPage } from '../templates/pages/webhooks';
 import { profilesPage } from '../templates/pages/profiles';
 import { AirtableService } from '../services/airtable';
@@ -128,6 +129,25 @@ router.get('/ai-content', async (c) => {
   } catch (error: any) {
     console.error('AI Content page error:', error);
     return c.html(errorPage('AI Content Error', error.message), 500);
+  }
+});
+
+/**
+ * GET /dashboard/ai-images
+ * AI-generated images gallery page
+ */
+router.get('/ai-images', async (c) => {
+  try {
+    // Get count of images from R2
+    const listed = await c.env.STORAGE.list({ prefix: 'ai-images/', limit: 1000 });
+    const count = listed.objects.length;
+
+    const html = aiImagesPage({ count, apiBase });
+    return c.html(html);
+
+  } catch (error: any) {
+    console.error('AI Images page error:', error);
+    return c.html(errorPage('AI Images Error', error.message), 500);
   }
 });
 

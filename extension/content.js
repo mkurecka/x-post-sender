@@ -1006,17 +1006,68 @@ async function openVisualContentModal(text, context) {
           </div>
         </div>
 
-        <label><strong>Image Types:</strong></label>
-        <div id="image-types-selector" style="margin-bottom: 15px;">
-          ${Object.entries(imageTypes).map(([key, spec]) => `
-            <label style="display: block; padding: 8px; margin: 5px 0; background: #fafafa; border-radius: 5px; cursor: pointer; border: 2px solid transparent;">
-              <input type="checkbox" class="image-type-checkbox" value="${key}" style="margin-right: 8px;">
-              <span>${spec.icon} ${spec.name}</span>
-              <span style="font-size: 11px; color: #666; display: block; margin-left: 24px;">
-                ${spec.description}
-              </span>
-            </label>
-          `).join('')}
+        <label><strong>Generation Mode:</strong></label>
+        <div style="margin-bottom: 15px;">
+          <label style="display: block; padding: 8px; margin: 5px 0; background: #fafafa; border-radius: 5px; cursor: pointer; border: 2px solid transparent;">
+            <input type="radio" name="gen-mode" value="template" checked style="margin-right: 8px;">
+            <span>📄 Template-based</span>
+            <span style="font-size: 11px; color: #666; display: block; margin-left: 24px;">
+              Generate images from HTML templates (fast, consistent)
+            </span>
+          </label>
+          <label style="display: block; padding: 8px; margin: 5px 0; background: #e8f4fd; border-radius: 5px; cursor: pointer; border: 2px solid transparent;">
+            <input type="radio" name="gen-mode" value="ai" style="margin-right: 8px;">
+            <span>🤖 AI Generated</span>
+            <span style="font-size: 11px; color: #666; display: block; margin-left: 24px;">
+              Generate images using AI (DALL-E, creative, unique)
+            </span>
+          </label>
+        </div>
+
+        <div id="template-options">
+          <label><strong>Image Types:</strong></label>
+          <div id="image-types-selector" style="margin-bottom: 15px;">
+            ${Object.entries(imageTypes).map(([key, spec]) => `
+              <label style="display: block; padding: 8px; margin: 5px 0; background: #fafafa; border-radius: 5px; cursor: pointer; border: 2px solid transparent;">
+                <input type="checkbox" class="image-type-checkbox" value="${key}" style="margin-right: 8px;">
+                <span>${spec.icon} ${spec.name}</span>
+                <span style="font-size: 11px; color: #666; display: block; margin-left: 24px;">
+                  ${spec.description}
+                </span>
+              </label>
+            `).join('')}
+          </div>
+        </div>
+
+        <div id="ai-options" style="display: none;">
+          <div style="margin-bottom: 10px;">
+            <label><strong>AI Model:</strong></label>
+            <select id="ai-model" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 5px;">
+              <option value="">Loading models...</option>
+            </select>
+          </div>
+          <label><strong>AI Image Prompt:</strong></label>
+          <textarea id="ai-prompt" style="width: 100%; height: 80px; padding: 10px; border: 1px solid #ddd; border-radius: 5px; margin-bottom: 10px; resize: vertical;" placeholder="Describe the image you want to generate based on the text above..."></textarea>
+          <div style="margin-bottom: 10px;">
+            <label><strong>Style:</strong></label>
+            <select id="ai-style" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 5px;">
+              <option value="vivid">Vivid (dramatic, hyper-real)</option>
+              <option value="natural">Natural (realistic, subtle)</option>
+            </select>
+          </div>
+          <div style="margin-bottom: 15px;">
+            <label><strong>Aspect Ratio:</strong></label>
+            <select id="ai-size" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 5px;">
+              <option value="1:1">Square (1:1)</option>
+              <option value="16:9">Landscape (16:9)</option>
+              <option value="9:16">Portrait (9:16)</option>
+              <option value="4:3">Standard (4:3)</option>
+              <option value="3:4">Portrait Standard (3:4)</option>
+            </select>
+          </div>
+          <button id="ai-suggest-prompt" type="button" style="padding: 8px 12px; background: #f0f0f0; border: 1px solid #ddd; border-radius: 5px; cursor: pointer; margin-bottom: 15px;">
+            ✨ Suggest prompt from text
+          </button>
         </div>
 
         <label style="cursor: pointer; margin-bottom: 15px; display: block;">
@@ -1053,8 +1104,158 @@ async function openVisualContentModal(text, context) {
   document.body.insertAdjacentHTML('beforeend', modalHtml);
   const overlay = document.getElementById('visual-content-overlay');
 
+  // Mode switching event handlers
+  const modeRadios = document.querySelectorAll('input[name="gen-mode"]');
+  const templateOptions = document.getElementById('template-options');
+  const aiOptions = document.getElementById('ai-options');
+  const generateBtn = document.getElementById('visual-generate');
+  const aiModelSelect = document.getElementById('ai-model');
+  let imageModelsLoaded = false;
+
+  // Function to load image models from API
+  async function loadImageModels() {
+    if (imageModelsLoaded) return;
+
+    try {
+      const backendUrl = appSettings?.backend?.baseUrl || 'https://text-processor-api.kureckamichal.workers.dev';
+      const response = await fetch(`${backendUrl}/api/proxy/image-models`);
+      const data = await response.json();
+
+      if (data.success && data.data?.length > 0) {
+        aiModelSelect.innerHTML = data.data.map(model => {
+          const price = model.pricing !== 'unknown' ? ` ($${parseFloat(model.pricing).toFixed(4)}/img)` : '';
+          return `<option value="${model.id}">${model.name}${price}</option>`;
+        }).join('');
+        imageModelsLoaded = true;
+      } else {
+        aiModelSelect.innerHTML = '<option value="google/gemini-2.5-flash-image">Gemini 2.5 Flash Image</option>';
+      }
+    } catch (error) {
+      console.error('Failed to load image models:', error);
+      aiModelSelect.innerHTML = '<option value="google/gemini-2.5-flash-image">Gemini 2.5 Flash Image</option>';
+    }
+  }
+
+  modeRadios.forEach(radio => {
+    radio.addEventListener('change', (e) => {
+      if (e.target.value === 'template') {
+        templateOptions.style.display = 'block';
+        aiOptions.style.display = 'none';
+        generateBtn.innerHTML = '🎨 Generate Images';
+      } else {
+        templateOptions.style.display = 'none';
+        aiOptions.style.display = 'block';
+        generateBtn.innerHTML = '🤖 Generate AI Image';
+        // Load models when AI mode is selected
+        loadImageModels();
+      }
+    });
+  });
+
+  // Suggest prompt from text button
+  document.getElementById('ai-suggest-prompt').addEventListener('click', async () => {
+    const promptTextarea = document.getElementById('ai-prompt');
+    const suggestBtn = document.getElementById('ai-suggest-prompt');
+
+    suggestBtn.disabled = true;
+    suggestBtn.innerHTML = '⏳ Generating...';
+
+    try {
+      await wakeUpServiceWorker();
+
+      const response = await chrome.runtime.sendMessage({
+        action: 'suggestImagePrompt',
+        text: text
+      });
+
+      if (response.success && response.prompt) {
+        promptTextarea.value = response.prompt;
+      } else {
+        showFloatingNotification(response.error || 'Failed to generate prompt suggestion', 'error');
+      }
+    } catch (error) {
+      console.error('Suggest prompt error:', error);
+      showFloatingNotification('Failed to suggest prompt', 'error');
+    } finally {
+      suggestBtn.disabled = false;
+      suggestBtn.innerHTML = '✨ Suggest prompt from text';
+    }
+  });
+
   // Generate button handler
   document.getElementById('visual-generate').addEventListener('click', async () => {
+    const selectedMode = document.querySelector('input[name="gen-mode"]:checked').value;
+    const generateCaption = document.getElementById('generate-caption').checked;
+    const statusDiv = document.getElementById('visual-status');
+
+    // AI Mode
+    if (selectedMode === 'ai') {
+      const aiModel = document.getElementById('ai-model').value;
+      const aiPrompt = document.getElementById('ai-prompt').value.trim();
+      const aiStyle = document.getElementById('ai-style').value;
+      const aiSize = document.getElementById('ai-size').value;
+
+      if (!aiPrompt) {
+        showFloatingNotification('Please enter an image prompt or click "Suggest prompt from text"', 'warning');
+        return;
+      }
+
+      statusDiv.innerHTML = '⏳ Generating AI image...';
+      statusDiv.style.color = '#1da1f2';
+
+      try {
+        await wakeUpServiceWorker();
+
+        const response = await chrome.runtime.sendMessage({
+          action: 'generateAIImage',
+          model: aiModel,
+          prompt: aiPrompt,
+          style: aiStyle,
+          aspectRatio: aiSize,
+          generateCaption,
+          originalText: text,
+          context
+        });
+
+        if (response.success) {
+          statusDiv.innerHTML = '✅ AI image generated successfully!';
+          statusDiv.style.color = 'green';
+
+          const previewDiv = document.getElementById('visual-preview');
+          const imagesDiv = document.getElementById('visual-images');
+          previewDiv.style.display = 'block';
+
+          imagesDiv.innerHTML = `
+            <div style="border: 1px solid #ddd; border-radius: 5px; overflow: hidden;">
+              <img src="${response.imageUrl}" style="width: 100%; height: auto;" alt="AI Generated">
+              <div style="padding: 5px; font-size: 11px; background: #f5f5f5;">
+                AI Generated (${aiSize})
+              </div>
+            </div>
+          `;
+
+          if (response.caption) {
+            const captionDiv = document.getElementById('visual-caption');
+            captionDiv.innerHTML = `<strong>Caption:</strong><br>${response.caption}`;
+            captionDiv.style.display = 'block';
+          }
+
+          showFloatingNotification('AI image generated successfully!', 'success');
+        } else {
+          statusDiv.innerHTML = `❌ Error: ${response.error}`;
+          statusDiv.style.color = 'red';
+          showFloatingNotification(response.error || 'Failed to generate AI image', 'error');
+        }
+      } catch (error) {
+        console.error('AI image error:', error);
+        statusDiv.innerHTML = `❌ Error: ${error.message}`;
+        statusDiv.style.color = 'red';
+        showFloatingNotification('Failed to generate AI image', 'error');
+      }
+      return;
+    }
+
+    // Template Mode (existing logic)
     const selectedTypes = Array.from(document.querySelectorAll('.image-type-checkbox:checked'))
       .map(cb => cb.value);
 
@@ -1064,9 +1265,7 @@ async function openVisualContentModal(text, context) {
     }
 
     const carouselMode = document.getElementById('carousel-mode').checked;
-    const generateCaption = document.getElementById('generate-caption').checked;
 
-    const statusDiv = document.getElementById('visual-status');
     statusDiv.innerHTML = '⏳ Generating images...';
     statusDiv.style.color = '#1da1f2';
 
