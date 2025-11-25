@@ -40,11 +40,16 @@ universal-text-processor/
     ├── content.js                # FAB, text selection, UI
     ├── api-client.js             # Backend API communication
     ├── settings-manager.js       # Settings management
-    ├── database.js               # IndexedDB wrapper
+    ├── template-generators.js    # Visual content HTML generators
     ├── manifest.json             # Extension configuration
     ├── settings.json             # Default settings, profiles
     ├── styles.css                # Extension UI styles
-    └── activate-test.html        # Testing page
+    ├── package.json              # Dev dependencies (ESLint, TypeScript)
+    ├── tsconfig.json             # TypeScript config for type checking
+    ├── .eslintrc.json            # ESLint rules
+    └── types/                    # TypeScript type definitions
+        ├── api.d.ts              # API response types
+        └── chrome.d.ts           # Chrome extension API types
 ```
 
 ## Backend (Cloudflare Workers)
@@ -521,7 +526,15 @@ npx wrangler r2 object list text-processor-storage
 ```bash
 cd extension
 
-# No build step needed
+# Install dev dependencies (first time only)
+npm install
+
+# REQUIRED: Run linting before any commit
+npm run check        # Runs both type-check and lint
+npm run lint         # ESLint only
+npm run lint:fix     # Auto-fix fixable issues
+
+# No build step needed for extension itself
 # Edit files → Reload extension in chrome://extensions/
 
 # Test in browser
@@ -532,6 +545,8 @@ open activate-test.html
 # Service Worker: chrome://extensions/ → service worker link
 # Content Script: Page DevTools (F12) → Console
 ```
+
+**IMPORTANT**: Always run `npm run check` in the extension directory before committing changes. This catches bugs like undefined variables and type mismatches that cause runtime errors.
 
 ### Testing Backend
 
@@ -549,6 +564,31 @@ curl -X POST https://text-processor-api.kureckamichal.workers.dev/api/v1/webhook
   -H "Content-Type: application/json" \
   -d '{"event": "test", "data": {}}'
 ```
+
+## Code Quality Rules
+
+### REQUIRED: Run Linting Before Commits
+**Extension**: Always run `npm run check` in the extension directory before committing any JavaScript changes.
+
+```bash
+cd extension
+npm run check  # MUST pass with 0 errors before commit
+```
+
+This catches:
+- Undefined variables (like the `account` bug that was found)
+- Dead code using undefined variables (like the `menuOpen` bug)
+- Type mismatches in API responses (like double-wrapped proxy responses)
+- Common JavaScript errors
+
+**Backend**: TypeScript compiler already enforces types. Run `npm run type-check` if needed.
+
+### API Response Handling
+When calling backend proxy endpoints (`/api/proxy/*`), responses may be double-wrapped:
+- Direct response: `{success, data: {url}}`
+- Proxy-wrapped: `{success, data: {success, data: {url}}}`
+
+Always check both levels when extracting data from proxy responses.
 
 ## Common Issues & Solutions
 
@@ -629,7 +669,14 @@ curl -X POST https://text-processor-api.kureckamichal.workers.dev/api/v1/webhook
 ```
 
 ### Extension
-No npm dependencies - pure vanilla JavaScript
+**Runtime**: No npm dependencies - pure vanilla JavaScript
+**Dev Dependencies** (for linting/type-checking):
+```json
+{
+  "eslint": "^8.57.0",
+  "typescript": "^5.7.3"
+}
+```
 
 ## Git Workflow
 
@@ -678,6 +725,6 @@ Types: feat, fix, docs, refactor, test, chore
 
 ---
 
-**Last Updated**: 2025-11-20
+**Last Updated**: 2025-11-25
 **Status**: ✅ Production Ready
 **Deployment**: Live on Cloudflare Workers
