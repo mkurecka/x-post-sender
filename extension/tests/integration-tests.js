@@ -67,24 +67,23 @@ class IntegrationTests {
 
 const tests = new IntegrationTests();
 
-// Test 1: Check database.js API
-tests.test('PostDatabase has addPost method', () => {
-  const code = fs.readFileSync(
-    path.join(__dirname, '../database.js'),
-    'utf8'
-  );
-  tests.assertContains(code, 'async addPost(', 'database.js should have addPost method');
-  tests.assertNotContains(code, 'async savePost(', 'database.js should not have savePost method');
-});
-
-// Test 2: Check background.js uses correct database method
-tests.test('background.js uses addPost (not savePost)', () => {
+// Test 1: Check background.js uses webhook instead of local database
+tests.test('background.js uses webhook for saves', () => {
   const code = fs.readFileSync(
     path.join(__dirname, '../background.js'),
     'utf8'
   );
-  tests.assertContains(code, 'postDatabase.addPost', 'background.js should use addPost');
-  tests.assertNotContains(code, 'postDatabase.savePost', 'background.js should not use savePost');
+  tests.assertContains(code, 'sendWebhookNotification', 'background.js should use sendWebhookNotification');
+  tests.assertNotContains(code, 'postDatabase', 'background.js should not use postDatabase (removed)');
+});
+
+// Test 2: Check background.js uses backend proxy for AI
+tests.test('background.js uses backend proxy for OpenRouter', () => {
+  const code = fs.readFileSync(
+    path.join(__dirname, '../background.js'),
+    'utf8'
+  );
+  tests.assertContains(code, '/api/proxy/openrouter', 'background.js should use backend proxy');
 });
 
 // Test 3: Check background.js does not use DOM APIs
@@ -236,7 +235,7 @@ tests.test('background.js imports template-generators.js', () => {
   );
 });
 
-tests.test('background.js imports database.js', () => {
+tests.test('background.js does not import database.js (removed)', () => {
   const code = fs.readFileSync(
     path.join(__dirname, '../background.js'),
     'utf8'
@@ -246,10 +245,10 @@ tests.test('background.js imports database.js', () => {
     "importScripts",
     'background.js should use importScripts'
   );
-  tests.assertContains(
+  tests.assertNotContains(
     code,
     "database.js",
-    'background.js should import database.js'
+    'background.js should NOT import database.js (removed)'
   );
 });
 
@@ -346,7 +345,7 @@ tests.test('All required extension files exist', () => {
     'manifest.json',
     'background.js',
     'content.js',
-    'database.js',
+    // 'database.js' - REMOVED: now using backend API only
     'api-client.js',
     'settings-manager.js',
     'template-generators.js',
@@ -358,6 +357,12 @@ tests.test('All required extension files exist', () => {
     const exists = fs.existsSync(path.join(__dirname, '..', file));
     tests.assert(exists, `Required file ${file} should exist`);
   });
+});
+
+// Test 11: database.js should NOT exist (intentionally removed)
+tests.test('database.js should NOT exist (removed)', () => {
+  const exists = fs.existsSync(path.join(__dirname, '../database.js'));
+  tests.assert(!exists, 'database.js should NOT exist - all data via backend API');
 });
 
 // Run all tests

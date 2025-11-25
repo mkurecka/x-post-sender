@@ -68,11 +68,11 @@ settings.get('/history', authMiddleware, async (c) => {
     const limit = parseInt(c.req.query('limit') || '50');
     const offset = parseInt(c.req.query('offset') || '0');
 
-    // Query settings history from webhooks table (where we log all changes)
+    // Query settings history from webhook_events table (where we log all changes)
     const history = await c.env.DB
       .prepare(`
         SELECT id, event, data_json, created_at
-        FROM webhooks
+        FROM webhook_events
         WHERE user_id = ? AND event LIKE '%settings%'
         ORDER BY created_at DESC
         LIMIT ? OFFSET ?
@@ -89,7 +89,7 @@ settings.get('/history', authMiddleware, async (c) => {
 
     // Get total count
     const countResult = await c.env.DB
-      .prepare('SELECT COUNT(*) as total FROM webhooks WHERE user_id = ? AND event LIKE \'%settings%\'')
+      .prepare('SELECT COUNT(*) as total FROM webhook_events WHERE user_id = ? AND event LIKE \'%settings%\'')
       .bind(userId)
       .first<any>();
 
@@ -133,11 +133,13 @@ settings.put('/', authMiddleware, async (c) => {
       .bind(settingsJson, userId)
       .run();
 
-    // Log settings change to webhooks table for history
+    // Log settings change to webhook_events table for history
     try {
+      const { generateId } = await import('../utils/id');
+      const eventId = generateId('evt');
       await c.env.DB
-        .prepare('INSERT INTO webhooks (event, data_json, user_id, created_at) VALUES (?, ?, ?, ?)')
-        .bind('settings_updated', JSON.stringify({ settings: newSettings }), userId, Date.now())
+        .prepare('INSERT INTO webhook_events (id, event, data_json, user_id, created_at) VALUES (?, ?, ?, ?, ?)')
+        .bind(eventId, 'settings_updated', JSON.stringify({ settings: newSettings }), userId, Date.now())
         .run();
     } catch (logError) {
       console.error('Failed to log settings change:', logError);
@@ -317,10 +319,10 @@ settings.get('/stats', authMiddleware, async (c) => {
     const userId = c.get('userId');
 
     // Get counts from database
-    const [postsCount, memoryCount, webhooksCount, tweetsCount, videosCount] = await Promise.all([
+    const [postsCount, memoryCount, webhookEventsCount, tweetsCount, videosCount] = await Promise.all([
       c.env.DB.prepare('SELECT COUNT(*) as count FROM posts WHERE user_id = ?').bind(userId).first<any>(),
       c.env.DB.prepare('SELECT COUNT(*) as count FROM posts WHERE user_id = ? AND type = ?').bind(userId, 'memory').first<any>(),
-      c.env.DB.prepare('SELECT COUNT(*) as count FROM webhooks WHERE user_id = ?').bind(userId).first<any>(),
+      c.env.DB.prepare('SELECT COUNT(*) as count FROM webhook_events WHERE user_id = ?').bind(userId).first<any>(),
       c.env.DB.prepare('SELECT COUNT(*) as count FROM posts WHERE user_id = ? AND type = ?').bind(userId, 'tweet').first<any>(),
       c.env.DB.prepare('SELECT COUNT(*) as count FROM posts WHERE user_id = ? AND type = ?').bind(userId, 'youtube_video').first<any>(),
     ]);
@@ -335,7 +337,7 @@ settings.get('/stats', authMiddleware, async (c) => {
     const webhookEvents = await c.env.DB
       .prepare(`
         SELECT event, COUNT(*) as count
-        FROM webhooks
+        FROM webhook_events
         WHERE user_id = ?
         GROUP BY event
         ORDER BY count DESC
@@ -369,7 +371,7 @@ settings.get('/stats', authMiddleware, async (c) => {
           videos: videosCount?.count || 0,
         },
         webhooks: {
-          total: webhooksCount?.count || 0,
+          total: webhookEventsCount?.count || 0,
           events: webhookEvents.results?.map((row: any) => ({
             event: row.event,
             count: row.count,

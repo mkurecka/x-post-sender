@@ -34,11 +34,8 @@ const contentJs = fs.readFileSync(
   'utf8'
 );
 
-// Read database.js
-const databaseJs = fs.readFileSync(
-  path.join(__dirname, '../database.js'),
-  'utf8'
-);
+// database.js removed - now using backend API only
+const databaseJs = ''; // Placeholder for removed file
 
 // Read background.js
 const backgroundJs = fs.readFileSync(
@@ -132,16 +129,16 @@ assert(
   'Observer watches for new tweets'
 );
 
-// Test 14: Check if database has saveTweet method
+// Test 14: database.js removed - tweets saved via webhook
 assert(
-  databaseJs.includes('async saveTweet(tweetData)'),
-  'database.js has saveTweet method'
+  backgroundJs.includes('sendWebhookNotification'),
+  'Tweets saved via webhook (database.js removed)'
 );
 
-// Test 15: Check if saveTweet saves as tweet type
+// Test 15: Check if saveTweet uses webhook
 assert(
-  databaseJs.includes("type: 'tweet'"),
-  'saveTweet saves with type: tweet'
+  backgroundJs.includes("'onSaveTweet'"),
+  'saveTweet uses onSaveTweet webhook event'
 );
 
 // Test 16: Check if background has saveTweet handler
@@ -202,10 +199,10 @@ assert(
   'extractTweetData includes all required fields'
 );
 
-// Test 25: Check if database stores tweet context
+// Test 25: Check if background sends tweetId in webhook
 assert(
-  databaseJs.includes('context:') && databaseJs.includes('tweetId'),
-  'database.js stores tweet context with tweetId'
+  backgroundJs.includes('tweetId'),
+  'background.js sends tweetId in webhook payload'
 );
 
 console.log('============================================================\n');

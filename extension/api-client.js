@@ -384,6 +384,126 @@ class APIClient {
       });
     });
   }
+
+  // ========== Posts API Methods ==========
+
+  async getAllPosts(options = {}) {
+    try {
+      const { status, type, limit = 50, offset = 0 } = options;
+      const params = new URLSearchParams();
+
+      if (status) params.append('status', status);
+      if (type) params.append('type', type);
+      params.append('limit', limit.toString());
+      params.append('offset', offset.toString());
+
+      const response = await fetch(`${this.getEndpoint('/posts')}?${params}`, {
+        method: 'GET',
+        headers: this.getHeaders()
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      return result.posts || [];
+    } catch (error) {
+      console.error('[API Client] Failed to get posts:', error);
+      return [];
+    }
+  }
+
+  async getPostById(postId) {
+    try {
+      const response = await fetch(this.getEndpoint(`/posts/${postId}`), {
+        method: 'GET',
+        headers: this.getHeaders()
+      });
+
+      if (!response.ok) {
+        if (response.status === 404) return null;
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      return result.post || null;
+    } catch (error) {
+      console.error('[API Client] Failed to get post:', error);
+      return null;
+    }
+  }
+
+  async updatePostStatus(postId, status, generatedOutput = null) {
+    try {
+      const body = { status };
+      if (generatedOutput) body.generated_output = generatedOutput;
+
+      const response = await fetch(this.getEndpoint(`/posts/${postId}`), {
+        method: 'PATCH',
+        headers: this.getHeaders(),
+        body: JSON.stringify(body)
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('[API Client] Failed to update post status:', error);
+      throw error;
+    }
+  }
+
+  async deletePost(postId) {
+    try {
+      const response = await fetch(this.getEndpoint(`/posts/${postId}`), {
+        method: 'DELETE',
+        headers: this.getHeaders()
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('[API Client] Failed to delete post:', error);
+      throw error;
+    }
+  }
+
+  async getPostsStats() {
+    try {
+      const response = await fetch(this.getEndpoint('/posts/stats/summary'), {
+        method: 'GET',
+        headers: this.getHeaders()
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      return result.stats || {
+        total: 0,
+        pending: 0,
+        approved: 0,
+        done: 0,
+        rejected: 0
+      };
+    } catch (error) {
+      console.error('[API Client] Failed to get posts stats:', error);
+      return {
+        total: 0,
+        pending: 0,
+        approved: 0,
+        done: 0,
+        rejected: 0
+      };
+    }
+  }
 }
 
 // Create global instance

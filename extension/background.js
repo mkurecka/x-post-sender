@@ -1,13 +1,12 @@
-// Import settings manager, database, API client, and template generators
-importScripts('settings-manager.js', 'database.js', 'api-client.js', 'template-generators.js');
+// Import settings manager, API client, and template generators
+importScripts('settings-manager.js', 'api-client.js', 'template-generators.js');
 
-// Initialize settings and database on extension load
+// Initialize settings on extension load
 let settingsLoaded = false;
 
-// Load settings and initialize database when background script starts
+// Load settings when background script starts
 (async () => {
   await settingsManager.load();
-  await postDatabase.init();
   await apiClient.init();
 
   // Load saved model settings from chrome.storage
@@ -23,7 +22,7 @@ let settingsLoaded = false;
   });
 
   settingsLoaded = true;
-  console.log('Settings and database loaded successfully');
+  console.log('[Extension] Settings loaded - using API-only mode');
 })();
 
 // Create context menu on install
@@ -97,29 +96,35 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     };
 
     try {
-      const response = await chrome.tabs.sendMessage(tab.id, {
-        action: "getSelectedText"
-      });
+      let context = fallbackContext;
 
-      // Use detailed context from content script if available
-      const context = response?.context || fallbackContext;
+      try {
+        const response = await chrome.tabs.sendMessage(tab.id, {
+          action: "getSelectedText"
+        });
+        // Use detailed context from content script if available
+        context = response?.context || fallbackContext;
+      } catch (msgError) {
+        // Content script not available, use fallback context
+        console.log("[Extension] Using fallback context (content script unavailable)");
+      }
 
-      await postDatabase.addPost({
-        type: 'memory',
-        originalText: selectedText,
+      // Send to backend via webhook
+      await sendWebhookNotification('saveToMemory', {
+        text: selectedText,
         context: context
       });
 
-      console.log("[Universal Text Processor] Saved to memory:", selectedText.substring(0, 50));
+      console.log("[Extension] Saved to backend:", selectedText.substring(0, 50));
     } catch (error) {
-      // Content script not available, use fallback context
-      await postDatabase.addPost({
-        type: 'memory',
-        originalText: selectedText,
-        context: fallbackContext
+      console.error("[Extension] Failed to save to memory:", error);
+      // Show error notification to user
+      chrome.notifications.create({
+        type: 'basic',
+        iconUrl: 'icon48.png',
+        title: 'Failed to Save',
+        message: error.message || 'Could not save to memory'
       });
-
-      console.log("[Universal Text Processor] Saved to memory (basic context):", selectedText.substring(0, 50));
     }
   }
 });
@@ -131,6 +136,11 @@ async function getApiKey() {
       resolve(result.openrouterApiKey || null);
     });
   });
+}
+
+// Get user ID - single user app
+function getUserId() {
+  return 'michal_main_user';
 }
 
 // Get webhook config from settings
@@ -155,18 +165,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       try {
         const { text, context, mode, actionParams, account, language, comment, sendWebhook, imageData } = request.data;
 
-        // Get API key from storage
-        const apiKey = await getApiKey();
-
-        if (!apiKey) {
-          sendResponse({
-            success: false,
-            error: "API key not configured. Please set your OpenRouter API key in the extension settings.",
-            needsSetup: true
-          });
-          return;
-        }
-
+        // API key is now stored on backend - no need to check here
         // Get API configuration from settings
         const apiConfig = settingsManager.getAPIConfig();
 
@@ -313,14 +312,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           ]
         };
 
-        // Call OpenRouter API
-        const response = await fetch(apiConfig.endpoint, {
+        // Call backend proxy (uses API key stored on backend)
+        const backendUrl = settingsManager.settings?.backend?.baseUrl || 'https://text-processor-api.kureckamichal.workers.dev';
+        const proxyEndpoint = `${backendUrl}/api/proxy/openrouter`;
+
+        console.log("[Extension] Using backend proxy:", proxyEndpoint);
+
+        const response = await fetch(proxyEndpoint, {
           method: "POST",
           headers: {
-            "Authorization": `Bearer ${apiKey}`,
-            "Content-Type": "application/json",
-            "HTTP-Referer": context.url || "https://chrome-extension",
-            "X-Title": "Universal Text Processor Extension"
+            "Content-Type": "application/json"
           },
           body: JSON.stringify(actualRequestBody)
         });
@@ -337,11 +338,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           throw new Error(`API error (${response.status}): ${errorText}`);
         }
 
-        const data = await response.json();
+        const responseData = await response.json();
+
+        // Backend proxy wraps response in {success, data} - unwrap it
+        const data = responseData.data || responseData;
 
         // Log successful response
         console.log("=".repeat(80));
-        console.log("✅ [OpenRouter Response] SUCCESS");
+        console.log("✅ [Backend Proxy Response] SUCCESS");
         console.log("=".repeat(80));
         console.log("📥 RESPONSE DETAILS:");
         console.log("  • Status:", response.status, response.statusText);
@@ -362,12 +366,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         console.log("\n📦 FULL RESPONSE:");
         console.log(JSON.stringify(data, null, 2));
 
-        // Check for error in response
-        if (data.error) {
+        // Check for error in response (from proxy or OpenRouter)
+        if (responseData.error || data.error) {
+          const error = responseData.error || data.error;
           console.log("\n❌ ERROR IN RESPONSE:");
-          console.error(data.error);
+          console.error(error);
           console.log("=".repeat(80));
-          throw new Error(data.error.message || JSON.stringify(data.error));
+          throw new Error(error.message || JSON.stringify(error));
         }
 
         // Extract content from response
@@ -381,7 +386,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           console.log("\n❌ UNEXPECTED RESPONSE STRUCTURE");
           console.error("Response data:", data);
           console.log("=".repeat(80));
-          throw new Error("Invalid response format from OpenRouter. Check console for details.");
+          throw new Error("Invalid response format. Check console for details.");
         }
 
         if (!generatedContent) {
@@ -520,130 +525,102 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   // Save to memory only (no processing)
   if (request.action === "saveToMemory") {
     (async () => {
-      const entry = await postDatabase.addPost({
-        type: 'memory',
-        originalText: request.data.text,
-        context: request.data.context || {}
-      });
-
-      // Send webhook if enabled
-      const webhookConfig = getWebhookConfig();
-      if (webhookConfig.enabled) {
+      try {
+        // Send to backend via webhook
         await sendWebhookNotification('saveToMemory', {
           text: request.data.text,
-          context: request.data.context,
-          entryId: entry.id
+          context: request.data.context
         });
-      }
 
-      sendResponse(entry);
+        sendResponse({ success: true, message: 'Saved to backend' });
+      } catch (error) {
+        console.error('[Extension] Failed to save to memory:', error);
+        sendResponse({ success: false, error: error.message || 'Failed to save' });
+      }
     })();
     return true;
   }
 
-  // Save processed text to database
+  // Save processed text via webhook
   if (request.action === "saveProcessedText") {
     (async () => {
-      const post = await postDatabase.addPost({
-        type: 'processed',
+      await sendWebhookNotification('processText', {
         originalText: request.data.originalText,
-        generatedOutput: request.data.generatedOutput,
+        generatedContent: request.data.generatedOutput,
         mode: request.data.mode,
         account: request.data.account,
         language: request.data.language,
-        comment: request.data.comment,
         context: request.data.context || {}
       });
-      sendResponse(post);
+      sendResponse({ success: true, message: 'Saved to backend' });
     })();
     return true;
   }
 
-  // Legacy database operations
+  // Legacy - redirect to processText webhook
   if (request.action === "saveToDatabase") {
     (async () => {
-      const post = await postDatabase.addPost({
-        type: 'generated',
-        targetAccount: request.data.targetAccount,
-        postUrl: request.data.postUrl,
+      await sendWebhookNotification('processText', {
+        originalText: request.data.originalText,
+        generatedContent: request.data.generatedOutput,
         mode: request.data.mode,
         language: request.data.language,
-        originalText: request.data.originalText,
-        generatedOutput: request.data.generatedOutput,
-        comment: request.data.comment
+        context: {}
       });
-      sendResponse(post);
+      sendResponse({ success: true, message: 'Saved to backend' });
     })();
     return true;
   }
 
   if (request.action === "getAllPosts") {
-    (async () => {
-      const posts = await postDatabase.getAll();
-      sendResponse(posts);
-    })();
+    sendResponse({ error: 'View data on dashboard: https://text-processor-api.kureckamichal.workers.dev/dashboard' });
     return true;
   }
 
   if (request.action === "getStats") {
-    (async () => {
-      const stats = await postDatabase.getStats();
-      sendResponse(stats);
-    })();
+    sendResponse({ error: 'View stats on dashboard: https://text-processor-api.kureckamichal.workers.dev/dashboard' });
     return true;
   }
 
   if (request.action === "updatePostStatus") {
-    (async () => {
-      const success = await postDatabase.updateStatus(request.data.id, request.data.status);
-      sendResponse({ success });
-    })();
+    sendResponse({ error: 'Not supported - use dashboard' });
     return true;
   }
 
   if (request.action === "deletePost") {
-    (async () => {
-      const success = await postDatabase.deletePost(request.data.id);
-      sendResponse({ success });
-    })();
+    sendResponse({ error: 'Not supported - use dashboard' });
     return true;
   }
 
   if (request.action === "exportDatabase") {
-    (async () => {
-      const json = await postDatabase.exportToJSON();
-      sendResponse(json);
-    })();
+    sendResponse({ error: 'View/export data on dashboard' });
     return true;
   }
 
   if (request.action === "saveTweet") {
     (async () => {
       const tweetData = request.data;
-      const savedTweet = await postDatabase.saveTweet(tweetData);
 
-      // Send webhook notification with full tweet data
+      // Send directly to backend via webhook
       await sendWebhookNotification('onSaveTweet', {
-        event: 'tweet_saved',
         data: {
-          id: savedTweet.id,
           tweetId: tweetData.tweetId,
           text: tweetData.text,
           author: {
             name: tweetData.author.name,
-            username: tweetData.author.handle,  // Make username explicit
+            username: tweetData.author.handle,
             handle: tweetData.author.handle,
             url: tweetData.author.url
           },
           url: tweetData.url,
           timestamp: tweetData.timestamp,
           media: tweetData.media,
-          metadata: tweetData.metadata,
-          savedAt: new Date().toISOString()
+          metadata: tweetData.metadata
         }
       });
 
-      sendResponse(savedTweet);
+      console.log('[Extension] Tweet saved to backend:', tweetData.tweetId);
+      sendResponse({ success: true, message: 'Tweet saved to backend' });
     })();
     return true;
   }
@@ -653,30 +630,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       try {
         const videoData = request.data;
 
-        // Save to database
-        const savedVideo = await postDatabase.addPost({
-          type: 'youtube_video',
-          originalText: videoData.title,
-          generatedOutput: videoData.transcript?.text || null,
-          context: {
-            videoId: videoData.videoId,
-            url: videoData.url,
-            title: videoData.title,
-            channel: videoData.channel,
-            description: videoData.description,
-            transcript: videoData.transcript,
-            metadata: videoData.metadata
-          },
-          status: 'pending'
-        });
-
-        console.log('[YouTube] Video saved to database:', savedVideo);
-
-        // Send webhook notification if enabled
+        // Send directly to backend via webhook
         await sendWebhookNotification('onSaveYouTubeVideo', {
-          event: 'youtube_video_saved',
           data: {
-            id: savedVideo.id,
             videoId: videoData.videoId,
             url: videoData.url,
             title: videoData.title,
@@ -687,12 +643,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           }
         });
 
+        console.log('[Extension] Video saved to backend:', videoData.videoId);
         sendResponse({
           success: true,
-          data: savedVideo
+          message: 'Video saved to backend'
         });
       } catch (error) {
-        console.error('[YouTube] Error saving video:', error);
+        console.error('[Extension] Error saving video:', error);
         sendResponse({
           success: false,
           error: error.message
@@ -827,19 +784,8 @@ Return ONLY the caption text, nothing else.`;
           }
         }
 
-        // Save to database
-        const visualContentData = {
-          type: 'visual_content',
-          originalText: text,
-          generatedOutput: JSON.stringify(images),
-          mode: carouselMode ? 'carousel' : 'single',
-          comment: caption,
-          context
-        };
-
-        await postDatabase.addPost(visualContentData);
-
-        // Send webhook notification if enabled
+        // Send directly to backend via webhook
+        // No local storage needed
         await sendWebhookNotification('onVisualContentCreated', {
           event: 'visual_content_created',
           data: {
@@ -876,33 +822,47 @@ async function sendWebhookNotification(eventType, payload) {
     const webhookConfig = getWebhookConfig();
 
     if (!webhookConfig || !webhookConfig.enabled) {
+      console.log('[Extension] Webhook disabled or not configured');
       return;
     }
 
     if (!webhookConfig.url) {
-      console.warn('Webhook URL not configured');
+      console.warn('[Extension] Webhook URL not configured');
       return;
     }
+
+    // Get userId to include in webhook
+    const userId = getUserId();
+
+    // Format payload correctly for backend
+    const webhookPayload = {
+      event: eventType,
+      userId: userId,
+      data: payload,  // Wrap payload in "data" object
+      timestamp: new Date().toISOString(),
+      source: 'universal-text-processor-extension'
+    };
+
+    console.log('[Extension] Sending webhook:', eventType, 'userId:', userId);
 
     const response = await fetch(webhookConfig.url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        event: eventType,
-        ...payload,
-        timestamp: new Date().toISOString(),
-        source: 'universal-text-processor-extension'
-      })
+      body: JSON.stringify(webhookPayload)
     });
 
     if (response.ok) {
-      console.log(`Webhook sent successfully for ${eventType}:`, response.status);
+      console.log(`[Extension] Webhook sent successfully for ${eventType}:`, response.status);
+      return true;
     } else {
-      console.error(`Webhook failed for ${eventType}:`, response.status, response.statusText);
+      const errorMsg = `Webhook failed: ${response.status} ${response.statusText}`;
+      console.error(`[Extension] ${errorMsg}`);
+      throw new Error(errorMsg);
     }
   } catch (error) {
-    console.error('Webhook error:', error);
+    console.error('[Extension] Webhook error:', error);
+    throw error; // Re-throw so caller knows it failed
   }
 }
