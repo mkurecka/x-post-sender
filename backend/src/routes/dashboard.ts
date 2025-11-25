@@ -5,6 +5,7 @@ import { memoriesPage } from '../templates/pages/memories';
 import { tweetsPage } from '../templates/pages/tweets';
 import { videosPage } from '../templates/pages/videos';
 import { aiContentPage } from '../templates/pages/ai-content';
+import { webhooksPage } from '../templates/pages/webhooks';
 
 const router = new Hono<{ Bindings: Env }>();
 
@@ -125,6 +126,26 @@ router.get('/ai-content', async (c) => {
   } catch (error: any) {
     console.error('AI Content page error:', error);
     return c.html(errorPage('AI Content Error', error.message), 500);
+  }
+});
+
+/**
+ * GET /dashboard/webhooks
+ * Webhook events history page
+ */
+router.get('/webhooks', async (c) => {
+  try {
+    const result = await c.env.DB.prepare(
+      'SELECT COUNT(*) as count FROM webhook_events'
+    ).first<any>();
+    const count = result?.count || 0;
+
+    const html = webhooksPage({ count, apiBase });
+    return c.html(html);
+
+  } catch (error: any) {
+    console.error('Webhooks page error:', error);
+    return c.html(errorPage('Webhooks Error', error.message), 500);
   }
 });
 

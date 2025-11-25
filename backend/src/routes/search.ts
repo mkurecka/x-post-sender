@@ -175,12 +175,27 @@ search.get('/recent', async (c) => {
 
     const table = c.req.query('table') || 'posts';
     const limit = parseInt(c.req.query('limit') || '20');
+    const offset = parseInt(c.req.query('offset') || '0');
     const type = c.req.query('type'); // Optional filter for posts type
+    const event = c.req.query('event'); // Optional filter for webhook event type
 
     let sql: string;
     let bindings: any[];
 
-    if (table === 'posts') {
+    if (table === 'webhook_events') {
+      // Webhook events table
+      if (event) {
+        sql = `SELECT id, event, data_json, user_id, created_at
+               FROM webhook_events WHERE event = ?
+               ORDER BY created_at DESC LIMIT ? OFFSET ?`;
+        bindings = [event, limit, offset];
+      } else {
+        sql = `SELECT id, event, data_json, user_id, created_at
+               FROM webhook_events
+               ORDER BY created_at DESC LIMIT ? OFFSET ?`;
+        bindings = [limit, offset];
+      }
+    } else if (table === 'posts') {
       if (type) {
         if (userId) {
           sql = `SELECT id, type, original_text, generated_output, created_at, context_json
