@@ -213,6 +213,21 @@ export function tweetsPage({ count, apiBase }: TweetsPageProps): string {
         text-decoration: underline;
       }
 
+      .delete-btn {
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        opacity: 0.5;
+        transition: all 0.2s;
+      }
+
+      .delete-btn:hover {
+        opacity: 1;
+        background: #fee2e2;
+      }
+
       .pagination {
         display: flex;
         justify-content: center;
@@ -297,13 +312,14 @@ export function tweetsPage({ count, apiBase }: TweetsPageProps): string {
               const images = media.images || [];
 
               return \`
-                <div class="tweet-card">
+                <div class="tweet-card" data-id="\${item.id}">
                   <div class="tweet-author">
                     <div class="tweet-avatar">👤</div>
                     <div class="tweet-author-info">
                       <div class="tweet-author-name">\${escapeHtml(authorName)}</div>
                       \${authorHandle ? \`<div class="tweet-author-handle">@\${escapeHtml(authorHandle)}</div>\` : ''}
                     </div>
+                    <button class="delete-btn" onclick="deletePost('\${item.id}', this)" title="Delete">🗑️</button>
                   </div>
                   <div class="tweet-text">\${escapeHtml(item.original_text || '')}</div>
                   \${images.length > 0 ? \`
@@ -385,6 +401,34 @@ export function tweetsPage({ count, apiBase }: TweetsPageProps): string {
           clearTimeout(timeout);
           timeout = setTimeout(() => func.apply(this, args), wait);
         };
+      }
+
+      async function deletePost(id, btn) {
+        if (!confirm('Delete this tweet?')) return;
+
+        btn.textContent = '⏳';
+        btn.disabled = true;
+
+        try {
+          const response = await fetch(API_BASE + '/api/search/post/' + id, {
+            method: 'DELETE'
+          });
+          const data = await response.json();
+
+          if (data.success) {
+            const card = btn.closest('.tweet-card');
+            card.style.opacity = '0';
+            setTimeout(() => card.remove(), 300);
+          } else {
+            alert('Failed to delete: ' + data.error);
+            btn.textContent = '🗑️';
+            btn.disabled = false;
+          }
+        } catch (error) {
+          alert('Error: ' + error.message);
+          btn.textContent = '🗑️';
+          btn.disabled = false;
+        }
       }
 
       // Initial load

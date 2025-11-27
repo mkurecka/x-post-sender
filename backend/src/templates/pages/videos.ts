@@ -232,6 +232,33 @@ export function videosPage({ count, apiBase }: VideosPageProps): string {
         text-decoration: underline;
       }
 
+      .delete-btn {
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        opacity: 0.5;
+        transition: all 0.2s;
+        margin-left: auto;
+      }
+
+      .delete-btn:hover {
+        opacity: 1;
+        background: #fee2e2;
+      }
+
+      .video-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+        padding-top: 0.75rem;
+        border-top: 1px solid var(--border);
+        align-items: center;
+      }
+
       .pagination {
         display: flex;
         justify-content: center;
@@ -310,27 +337,27 @@ export function videosPage({ count, apiBase }: VideosPageProps): string {
               const context = item.context_json ? JSON.parse(item.context_json) : {};
               const videoUrl = context.url || '';
               const channel = context.channel || {};
-              const channelName = channel.name || channel.title || 'Unknown Channel';
+              const channelName = channel.name || channel.title || context.channelName || 'Unknown Channel';
               const thumbnail = context.thumbnail || '';
               const title = item.original_text || context.title || 'Untitled Video';
 
               // Extract video ID for YouTube thumbnail fallback
-              let videoId = '';
-              if (videoUrl) {
+              let videoId = context.videoId || '';
+              if (!videoId && videoUrl) {
                 const match = videoUrl.match(/(?:youtube\\.com\\/watch\\?v=|youtu\\.be\\/)([\\w-]+)/);
                 if (match) videoId = match[1];
               }
               const thumbUrl = thumbnail || (videoId ? 'https://img.youtube.com/vi/' + videoId + '/mqdefault.jpg' : '');
 
               return \`
-                <a href="\${videoUrl || '#'}" target="_blank" class="video-card">
-                  <div class="video-thumbnail">
+                <div class="video-card" data-id="\${item.id}">
+                  <a href="\${videoUrl || '#'}" target="_blank" class="video-thumbnail">
                     \${thumbUrl
                       ? '<img src="' + thumbUrl + '" alt="' + escapeHtml(title) + '" loading="lazy" />'
                       : '<span class="video-thumbnail-placeholder">📹</span>'
                     }
                     <div class="video-play-overlay"></div>
-                  </div>
+                  </a>
                   <div class="video-content">
                     <h3 class="video-title">\${escapeHtml(title)}</h3>
                     <div class="video-channel">
@@ -339,9 +366,11 @@ export function videosPage({ count, apiBase }: VideosPageProps): string {
                     </div>
                     <div class="video-meta">
                       <span class="video-meta-item">📅 Saved \${dateStr}</span>
+                      \${videoUrl ? \`<a href="\${videoUrl}" target="_blank" class="video-link video-meta-item">🔗 Watch</a>\` : ''}
+                      <button class="delete-btn" onclick="deleteVideo('\${item.id}', this)" title="Delete">🗑️</button>
                     </div>
                   </div>
-                </a>
+                </div>
               \`;
             }).join('');
 
@@ -411,6 +440,34 @@ export function videosPage({ count, apiBase }: VideosPageProps): string {
           clearTimeout(timeout);
           timeout = setTimeout(() => func.apply(this, args), wait);
         };
+      }
+
+      async function deleteVideo(id, btn) {
+        if (!confirm('Delete this video?')) return;
+
+        btn.textContent = '⏳';
+        btn.disabled = true;
+
+        try {
+          const response = await fetch(API_BASE + '/api/search/post/' + id, {
+            method: 'DELETE'
+          });
+          const data = await response.json();
+
+          if (data.success) {
+            const card = btn.closest('.video-card');
+            card.style.opacity = '0';
+            setTimeout(() => card.remove(), 300);
+          } else {
+            alert('Failed to delete: ' + data.error);
+            btn.textContent = '🗑️';
+            btn.disabled = false;
+          }
+        } catch (error) {
+          alert('Error: ' + error.message);
+          btn.textContent = '🗑️';
+          btn.disabled = false;
+        }
       }
 
       // Initial load

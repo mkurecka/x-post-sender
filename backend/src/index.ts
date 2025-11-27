@@ -15,6 +15,7 @@ import webhookRoutes from './routes/webhook';
 import proxyRoutes from './routes/proxy';
 import searchRoutes from './routes/search';
 import dashboardRoutes from './routes/dashboard';
+import mobileRoutes from './routes/mobile';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -70,6 +71,9 @@ app.route('/api/search', searchRoutes);
 // Webhook routes (v1 for backward compatibility)
 app.route('/api/v1/webhook', webhookRoutes);
 app.route('/api/webhook', webhookRoutes);
+
+// Mobile API routes (for iOS Shortcuts / automation)
+app.route('/api/mobile', mobileRoutes);
 
 // 404 handler
 app.notFound((c) => {

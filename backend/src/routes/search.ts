@@ -254,4 +254,76 @@ search.get('/recent', async (c) => {
   }
 });
 
+/**
+ * DELETE /api/search/memory/:id
+ * Delete a memory item (for dashboard)
+ */
+search.delete('/memory/:id', async (c) => {
+  try {
+    const id = c.req.param('id');
+
+    const result = await c.env.DB
+      .prepare('DELETE FROM memory WHERE id = ?')
+      .bind(id)
+      .run();
+
+    if (result.meta.changes === 0) {
+      return c.json({ success: false, error: 'Memory not found' }, 404);
+    }
+
+    return c.json({ success: true, message: 'Memory deleted' });
+  } catch (error: any) {
+    console.error('Delete memory error:', error);
+    return c.json({ success: false, error: error.message }, 500);
+  }
+});
+
+/**
+ * DELETE /api/search/post/:id
+ * Delete a post (tweet, video, etc.) (for dashboard)
+ */
+search.delete('/post/:id', async (c) => {
+  try {
+    const id = c.req.param('id');
+
+    const result = await c.env.DB
+      .prepare('DELETE FROM posts WHERE id = ?')
+      .bind(id)
+      .run();
+
+    if (result.meta.changes === 0) {
+      return c.json({ success: false, error: 'Post not found' }, 404);
+    }
+
+    return c.json({ success: true, message: 'Post deleted' });
+  } catch (error: any) {
+    console.error('Delete post error:', error);
+    return c.json({ success: false, error: error.message }, 500);
+  }
+});
+
+/**
+ * DELETE /api/search/webhook/:id
+ * Delete a webhook event (for dashboard)
+ */
+search.delete('/webhook/:id', async (c) => {
+  try {
+    const id = c.req.param('id');
+
+    const result = await c.env.DB
+      .prepare('DELETE FROM webhook_events WHERE id = ?')
+      .bind(id)
+      .run();
+
+    if (result.meta.changes === 0) {
+      return c.json({ success: false, error: 'Webhook event not found' }, 404);
+    }
+
+    return c.json({ success: true, message: 'Webhook event deleted' });
+  } catch (error: any) {
+    console.error('Delete webhook error:', error);
+    return c.json({ success: false, error: error.message }, 500);
+  }
+});
+
 export default search;

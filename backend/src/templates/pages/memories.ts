@@ -203,6 +203,31 @@ export function memoriesPage({ count, apiBase }: MemoriesPageProps): string {
         padding: 3rem;
         color: var(--text-secondary);
       }
+
+      .delete-btn {
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        opacity: 0.5;
+        transition: all 0.2s;
+        margin-left: auto;
+      }
+
+      .delete-btn:hover {
+        opacity: 1;
+        background: #fee2e2;
+      }
+
+      .memory-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem;
+        font-size: 0.8rem;
+        color: var(--text-secondary);
+        align-items: center;
+      }
     </style>
   `;
 
@@ -245,11 +270,12 @@ export function memoriesPage({ count, apiBase }: MemoriesPageProps): string {
               const pageTitle = context.pageTitle || 'Source';
 
               return \`
-                <div class="memory-card">
+                <div class="memory-card" data-id="\${item.id}">
                   <div class="memory-text">\${escapeHtml(item.text)}</div>
                   <div class="memory-meta">
                     <span class="memory-meta-item">📅 \${dateStr}</span>
                     \${url ? \`<a href="\${url}" target="_blank" class="memory-source memory-meta-item">🔗 \${pageTitle}</a>\` : ''}
+                    <button class="delete-btn" onclick="deleteMemory('\${item.id}', this)" title="Delete">🗑️</button>
                   </div>
                 </div>
               \`;
@@ -321,6 +347,34 @@ export function memoriesPage({ count, apiBase }: MemoriesPageProps): string {
           clearTimeout(timeout);
           timeout = setTimeout(() => func.apply(this, args), wait);
         };
+      }
+
+      async function deleteMemory(id, btn) {
+        if (!confirm('Delete this memory?')) return;
+
+        btn.textContent = '⏳';
+        btn.disabled = true;
+
+        try {
+          const response = await fetch(API_BASE + '/api/search/memory/' + id, {
+            method: 'DELETE'
+          });
+          const data = await response.json();
+
+          if (data.success) {
+            const card = btn.closest('.memory-card');
+            card.style.opacity = '0';
+            setTimeout(() => card.remove(), 300);
+          } else {
+            alert('Failed to delete: ' + data.error);
+            btn.textContent = '🗑️';
+            btn.disabled = false;
+          }
+        } catch (error) {
+          alert('Error: ' + error.message);
+          btn.textContent = '🗑️';
+          btn.disabled = false;
+        }
       }
 
       // Initial load
